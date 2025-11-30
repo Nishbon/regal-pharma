@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: regal-pharma-backend
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: static
+    name: regal-pharma-frontend
+    rootDir: frontend
+    buildCommand: npm run build
+    publishDir: dist
