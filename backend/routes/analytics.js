@@ -1,154 +1,282 @@
 const express = require('express');
-const db = require('../config/database');
+const DailyReport = require('../models/DailyReport');
+const User = require('../models/User');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Get weekly stats for user (FOR MEDREP DASHBOARD)
-router.get('/weekly', (req, res) => {
-  let sql = `
-    SELECT 
-      SUM(dentists + physiotherapists + gynecologists + internists + 
-          general_practitioners + pediatricians + dermatologists) as total_doctors,
-      SUM(pharmacies) as total_pharmacies,
-      SUM(dispensaries) as total_dispensaries,
-      SUM(orders_count) as total_orders,
-      SUM(orders_value) as total_value,
-      report_date
-    FROM daily_reports 
-    WHERE user_id = ? AND report_date >= date('now', '-7 days')
-    GROUP BY report_date 
-    ORDER BY report_date DESC
-  `;
+router.get('/weekly', async (req, res) => {
+  try {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  db.all(sql, [req.user.id], (err, rows) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
-    }
+    const weeklyStats = await DailyReport.aggregate([
+      {
+        $match: {
+          user_id: req.user.id,
+          report_date: { $gte: oneWeekAgo }
+        }
+      },
+      {
+        $group: {
+          _id: '$report_date',
+          total_doctors: {
+            $sum: {
+              $add: [
+                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                '$general_practitioners', '$pediatricians', '$dermatologists'
+              ]
+            }
+          },
+          total_pharmacies: { $sum: '$pharmacies' },
+          total_dispensaries: { $sum: '$dispensaries' },
+          total_orders: { $sum: '$orders_count' },
+          total_value: { $sum: '$orders_value' }
+        }
+      },
+      {
+        $project: {
+          report_date: '$_id',
+          total_doctors: 1,
+          total_pharmacies: 1,
+          total_dispensaries: 1,
+          total_orders: 1,
+          total_value: 1,
+          _id: 0
+        }
+      },
+      { $sort: { report_date: -1 } }
+    ]);
 
     res.json({
       success: true,
-      data: rows
+      data: weeklyStats
     });
-  });
+  } catch (error) {
+    console.error('Weekly stats error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 // Get monthly stats for user (FOR MEDREP ANALYTICS)
-router.get('/monthly', (req, res) => {
-  let sql = `
-    SELECT 
-      strftime('%Y-%m', report_date) as month,
-      SUM(dentists + physiotherapists + gynecologists + internists + 
-          general_practitioners + pediatricians + dermatologists) as total_doctors,
-      SUM(pharmacies) as total_pharmacies,
-      SUM(dispensaries) as total_dispensaries,
-      SUM(orders_count) as total_orders,
-      SUM(orders_value) as total_value
-    FROM daily_reports 
-    WHERE user_id = ?
-    GROUP BY strftime('%Y-%m', report_date)
-    ORDER BY month DESC
-    LIMIT 12
-  `;
-
-  db.all(sql, [req.user.id], (err, rows) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
-    }
+router.get('/monthly', async (req, res) => {
+  try {
+    const monthlyStats = await DailyReport.aggregate([
+      {
+        $match: {
+          user_id: req.user.id
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$report_date' },
+            month: { $month: '$report_date' }
+          },
+          total_doctors: {
+            $sum: {
+              $add: [
+                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                '$general_practitioners', '$pediatricians', '$dermatologists'
+              ]
+            }
+          },
+          total_pharmacies: { $sum: '$pharmacies' },
+          total_dispensaries: { $sum: '$dispensaries' },
+          total_orders: { $sum: '$orders_count' },
+          total_value: { $sum: '$orders_value' }
+        }
+      },
+      {
+        $project: {
+          month: {
+            $dateToString: {
+              format: '%Y-%m',
+              date: {
+                $dateFromParts: {
+                  year: '$_id.year',
+                  month: '$_id.month'
+                }
+              }
+            }
+          },
+          total_doctors: 1,
+          total_pharmacies: 1,
+          total_dispensaries: 1,
+          total_orders: 1,
+          total_value: 1,
+          _id: 0
+        }
+      },
+      { $sort: { month: -1 } },
+      { $limit: 12 }
+    ]);
 
     res.json({
       success: true,
-      data: rows
+      data: monthlyStats
     });
-  });
+  } catch (error) {
+    console.error('Monthly stats error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 // Supervisor analytics - team performance
-router.get('/team-performance', requireRole(['supervisor']), (req, res) => {
-  const { period = 'month' } = req.query;
-  
-  let dateFilter = '';
-  if (period === 'week') {
-    dateFilter = 'AND dr.report_date >= date("now", "-7 days")';
-  } else if (period === 'month') {
-    dateFilter = 'AND dr.report_date >= date("now", "-30 days")';
-  }
-
-  const sql = `
-    SELECT 
-      u.id as user_id,
-      u.name as user_name,
-      u.region,
-      COUNT(dr.id) as reports_count,
-      SUM(dr.dentists + dr.physiotherapists + dr.gynecologists + dr.internists + 
-          dr.general_practitioners + dr.pediatricians + dr.dermatologists) as total_doctors,
-      SUM(dr.pharmacies) as total_pharmacies,
-      SUM(dr.dispensaries) as total_dispensaries,
-      SUM(dr.orders_count) as total_orders,
-      SUM(dr.orders_value) as total_value
-    FROM users u
-    LEFT JOIN daily_reports dr ON u.id = dr.user_id ${dateFilter}
-    WHERE u.role = 'medrep' AND u.is_active = 1
-    GROUP BY u.id, u.name, u.region
-    ORDER BY total_value DESC
-  `;
-
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
+router.get('/team-performance', requireRole(['supervisor']), async (req, res) => {
+  try {
+    const { period = 'month' } = req.query;
+    
+    let dateFilter = {};
+    if (period === 'week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      dateFilter.report_date = { $gte: oneWeekAgo };
+    } else if (period === 'month') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+      dateFilter.report_date = { $gte: oneMonthAgo };
     }
+
+    const teamPerformance = await User.aggregate([
+      {
+        $match: {
+          role: 'medrep',
+          is_active: true
+        }
+      },
+      {
+        $lookup: {
+          from: 'dailyreports',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$user_id', '$$userId'] },
+                ...dateFilter
+              }
+            }
+          ],
+          as: 'reports'
+        }
+      },
+      {
+        $project: {
+          user_id: '$_id',
+          user_name: '$name',
+          region: '$region',
+          reports_count: { $size: '$reports' },
+          total_doctors: {
+            $sum: {
+              $map: {
+                input: '$reports',
+                as: 'report',
+                in: {
+                  $add: [
+                    '$$report.dentists', '$$report.physiotherapists', '$$report.gynecologists',
+                    '$$report.internists', '$$report.general_practitioners', 
+                    '$$report.pediatricians', '$$report.dermatologists'
+                  ]
+                }
+              }
+            }
+          },
+          total_pharmacies: { $sum: '$reports.pharmacies' },
+          total_dispensaries: { $sum: '$reports.dispensaries' },
+          total_orders: { $sum: '$reports.orders_count' },
+          total_value: { $sum: '$reports.orders_value' }
+        }
+      },
+      { $sort: { total_value: -1 } }
+    ]);
 
     res.json({
       success: true,
-      data: rows
+      data: teamPerformance
     });
-  });
+  } catch (error) {
+    console.error('Team performance error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 // Region-wise analytics
-router.get('/region-performance', requireRole(['supervisor']), (req, res) => {
-  const sql = `
-    SELECT 
-      region,
-      COUNT(DISTINCT user_id) as active_reps,
-      SUM(dentists + physiotherapists + gynecologists + internists + 
-          general_practitioners + pediatricians + dermatologists) as total_doctors,
-      SUM(pharmacies) as total_pharmacies,
-      SUM(dispensaries) as total_dispensaries,
-      SUM(orders_count) as total_orders,
-      SUM(orders_value) as total_value
-    FROM daily_reports 
-    WHERE report_date >= date("now", "-30 days")
-    GROUP BY region
-    ORDER BY total_value DESC
-  `;
+router.get('/region-performance', requireRole(['supervisor']), async (req, res) => {
+  try {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
 
-  db.all(sql, [], (err, rows) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
-    }
+    const regionPerformance = await DailyReport.aggregate([
+      {
+        $match: {
+          report_date: { $gte: oneMonthAgo }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'user'
+        }
+      },
+      {
+        $unwind: '$user'
+      },
+      {
+        $group: {
+          _id: '$user.region',
+          active_reps: { $addToSet: '$user_id' },
+          total_doctors: {
+            $sum: {
+              $add: [
+                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                '$general_practitioners', '$pediatricians', '$dermatologists'
+              ]
+            }
+          },
+          total_pharmacies: { $sum: '$pharmacies' },
+          total_dispensaries: { $sum: '$dispensaries' },
+          total_orders: { $sum: '$orders_count' },
+          total_value: { $sum: '$orders_value' }
+        }
+      },
+      {
+        $project: {
+          region: '$_id',
+          active_reps: { $size: '$active_reps' },
+          total_doctors: 1,
+          total_pharmacies: 1,
+          total_dispensaries: 1,
+          total_orders: 1,
+          total_value: 1,
+          _id: 0
+        }
+      },
+      { $sort: { total_value: -1 } }
+    ]);
 
     res.json({
       success: true,
-      data: rows
+      data: regionPerformance
     });
-  });
+  } catch (error) {
+    console.error('Region performance error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 module.exports = router;

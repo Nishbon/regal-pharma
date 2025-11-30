@@ -4,14 +4,19 @@ services:
     env: node
     plan: free
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install && npm run build
     startCommand: node server.js
     envVars:
       - key: NODE_ENV
         value: production
+      - key: FRONTEND_URL
+        value: https://regal-pharma-frontend.onrender.com
 
   - type: static
     name: regal-pharma-frontend
     rootDir: frontend
     buildCommand: npm run build
     publishDir: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://regal-pharma-backend.onrender.com

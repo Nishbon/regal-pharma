@@ -6,6 +6,9 @@ const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
 
+// MongoDB connection - ADD THIS LINE
+const connectDB = require('./config/database');
+
 const authRoutes = require('./routes/auth');
 const reportRoutes = require('./routes/reports');
 const analyticsRoutes = require('./routes/analytics');
@@ -14,6 +17,9 @@ const userRoutes = require('./routes/users');
 const { authenticateToken } = require('./middleware/auth');
 
 const app = express();
+
+// Connect to MongoDB - ADD THIS LINE
+connectDB();
 
 // Security middleware
 app.use(helmet());

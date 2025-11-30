@@ -1,193 +1,157 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+const mongoose = require('mongoose');
 
-// Ensure database directory exists
-const dbDir = path.join(__dirname, '../../database');
-if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
-}
-
-// Use environment variable or default path
-const dbPath = process.env.DATABASE_PATH || path.join(dbDir, 'medical_reports.db');
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-  } else {
-    console.log(`✅ Connected to SQLite database: ${dbPath}`);
-    initializeDatabase();
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(
+      process.env.MONGODB_URI || 'mongodb://localhost:27017/medical_reports', 
+      {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      }
+    );
+    
+    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    console.log(`📊 Database: ${conn.connection.name}`);
+    
+    // Create default users and sample reports
+    await createDefaultUsers();
+    await createSampleReports();
+    
+  } catch (error) {
+    console.error('❌ Database connection error:', error);
+    process.exit(1);
   }
-});
+};
 
-function initializeDatabase() {
-  // Create users table
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'medrep',
-    region VARCHAR(50),
-    is_active BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating users table:', err);
-    } else {
-      console.log('✅ Users table ready');
-      createReportsTable();
-    }
-  });
-}
-
-function createReportsTable() {
-  // Create daily_reports table
-  db.run(`CREATE TABLE IF NOT EXISTS daily_reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    report_date DATE NOT NULL,
-    region VARCHAR(50) NOT NULL,
-    
-    dentists INTEGER DEFAULT 0,
-    physiotherapists INTEGER DEFAULT 0,
-    gynecologists INTEGER DEFAULT 0,
-    internists INTEGER DEFAULT 0,
-    general_practitioners INTEGER DEFAULT 0,
-    pediatricians INTEGER DEFAULT 0,
-    dermatologists INTEGER DEFAULT 0,
-    
-    pharmacies INTEGER DEFAULT 0,
-    dispensaries INTEGER DEFAULT 0,
-    
-    orders_count INTEGER DEFAULT 0,
-    orders_value DECIMAL(15,2) DEFAULT 0,
-    
-    summary TEXT,
-    
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE(user_id, report_date)
-  )`, function(err) {
-    if (err) {
-      console.error('Error creating daily_reports table:', err);
-    } else {
-      console.log('✅ Daily reports table ready');
-      createIndexes();
-    }
-  });
-}
-
-function createIndexes() {
-  // Create indexes
-  db.run(`CREATE INDEX IF NOT EXISTS idx_daily_reports_user_date 
-          ON daily_reports(user_id, report_date)`, function(err) {
-    if (err) console.error('Error creating index 1:', err);
-  });
-  
-  db.run(`CREATE INDEX IF NOT EXISTS idx_daily_reports_date 
-          ON daily_reports(report_date)`, function(err) {
-    if (err) console.error('Error creating index 2:', err);
-  });
-
-  // Now create all users
-  createAllUsers();
-}
-
-function createAllUsers() {
+// Create default users
+async function createDefaultUsers() {
+  const User = require('../models/User');
   const bcrypt = require('bcryptjs');
   
-  // First create admin user
-  const adminHashedPassword = bcrypt.hashSync('admin123', 10);
-  
-  db.get("SELECT id, username FROM users WHERE username = 'admin'", (err, row) => {
-    if (err) {
-      console.error('Error checking for admin user:', err);
-      return;
+  const defaultUsers = [
+    {
+      username: 'admin',
+      password: 'admin123',
+      name: 'System Administrator',
+      email: 'admin@medicalreports.com',
+      role: 'supervisor'
+    },
+    {
+      username: 'bonte',
+      password: 'bonte123', 
+      name: 'Bonte',
+      email: 'bonte@company.com',
+      role: 'medrep',
+      region: 'Kigali'
+    },
+    {
+      username: 'liliane',
+      password: 'liliane123',
+      name: 'Liliane', 
+      email: 'liliane@company.com',
+      role: 'medrep',
+      region: 'Eastern'
+    },
+    {
+      username: 'deborah',
+      password: 'deborah123',
+      name: 'Deborah',
+      email: 'deborah@company.com', 
+      role: 'medrep',
+      region: 'Western'
+    },
+    {
+      username: 'valens',
+      password: 'valens123',
+      name: 'Valens',
+      email: 'valens@company.com',
+      role: 'medrep', 
+      region: 'Northern'
     }
-    
-    if (!row) {
-      console.log('👤 Creating admin user...');
-      db.run(`INSERT INTO users (username, password, name, email, role) 
-              VALUES (?, ?, ?, ?, ?)`, 
-        ['admin', adminHashedPassword, 'System Administrator', 'admin@medicalreports.com', 'supervisor'],
-        function(err) {
-          if (err) {
-            console.error('❌ Error creating admin user:', err);
-          } else {
-            console.log('✅ Admin user created successfully: admin / admin123');
-            createMedReps();
-          }
-        }
-      );
-    } else {
-      console.log('✅ Admin user already exists: admin / admin123');
-      createMedReps();
-    }
-  });
-}
-
-// ADD THIS FUNCTION TO CREATE ALL MEDREPS
-function createMedReps() {
-  const bcrypt = require('bcryptjs');
-  const medReps = [
-    { username: 'bonte', password: 'bonte123', name: 'Bonte', email: 'bonte@company.com', region: 'Kigali' },
-    { username: 'liliane', password: 'liliane123', name: 'Liliane', email: 'liliane@company.com', region: 'Eastern' },
-    { username: 'deborah', password: 'deborah123', name: 'Deborah', email: 'deborah@company.com', region: 'Western' },
-    { username: 'valens', password: 'valens123', name: 'Valens', email: 'valens@company.com', region: 'Northern' }
   ];
 
   let createdCount = 0;
-  const totalMedReps = medReps.length;
-
-  medReps.forEach(medrep => {
-    const hashedPassword = bcrypt.hashSync(medrep.password, 10);
-    
-    db.get("SELECT id FROM users WHERE username = ?", [medrep.username], (err, row) => {
-      if (err) {
-        console.error(`❌ Error checking for ${medrep.username}:`, err);
-        return;
-      }
-      
-      if (!row) {
-        db.run(`INSERT INTO users (username, password, name, email, role, region) 
-                VALUES (?, ?, ?, ?, ?, ?)`, 
-          [medrep.username, hashedPassword, medrep.name, medrep.email, 'medrep', medrep.region],
-          function(err) {
-            if (err) {
-              console.error(`❌ Error creating ${medrep.name}:`, err);
-            } else {
-              console.log(`✅ MedRep created: ${medrep.name} / ${medrep.password}`);
-            }
-            createdCount++;
-            checkCompletion();
-          }
-        );
-      } else {
-        console.log(`✅ MedRep already exists: ${medrep.name}`);
+  
+  for (const userData of defaultUsers) {
+    try {
+      const existingUser = await User.findOne({ username: userData.username });
+      if (!existingUser) {
+        const user = new User(userData);
+        await user.save();
+        console.log(`✅ Created user: ${userData.name}`);
         createdCount++;
-        checkCompletion();
+      } else {
+        console.log(`✅ User already exists: ${userData.name}`);
       }
-    });
-  });
-
-  function checkCompletion() {
-    if (createdCount === totalMedReps) {
-      console.log('🎉 All users created successfully!');
-      console.log('\n=== LOGIN CREDENTIALS ===');
-      console.log('Supervisor: admin / admin123');
-      console.log('MedReps:');
-      console.log('  Bonte: bonte / bonte123');
-      console.log('  Liliane: liliane / liliane123');
-      console.log('  Deborah: deborah / deborah123');
-      console.log('  Valens: valens / valens123');
-      console.log('=========================\n');
+    } catch (error) {
+      console.error(`❌ Error creating user ${userData.name}:`, error.message);
     }
+  }
+  
+  console.log(`🎉 User setup complete. ${createdCount} users checked/created.`);
+}
+
+// Create sample reports
+async function createSampleReports() {
+  const DailyReport = require('../models/DailyReport');
+  const User = require('../models/User');
+  
+  try {
+    // Check if reports already exist
+    const existingReports = await DailyReport.countDocuments();
+    if (existingReports > 0) {
+      console.log(`📊 ${existingReports} reports already exist in database`);
+      return;
+    }
+    
+    console.log('📊 Creating sample reports...');
+    
+    // Get all medrep users
+    const medreps = await User.find({ role: 'medrep' });
+    
+    const sampleReports = [];
+    const today = new Date();
+    
+    // Create reports for last 30 days for each medrep
+    for (let i = 0; i < 30; i++) {
+      const reportDate = new Date(today);
+      reportDate.setDate(reportDate.getDate() - i);
+      
+      // Only create reports for weekdays (Mon-Fri)
+      const dayOfWeek = reportDate.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 1=Monday, 5=Friday
+        for (const medrep of medreps) {
+          sampleReports.push({
+            user_id: medrep._id,
+            report_date: new Date(reportDate),
+            region: medrep.region,
+            dentists: Math.floor(Math.random() * 5),
+            physiotherapists: Math.floor(Math.random() * 3),
+            gynecologists: Math.floor(Math.random() * 4),
+            internists: Math.floor(Math.random() * 2),
+            general_practitioners: Math.floor(Math.random() * 6),
+            pediatricians: Math.floor(Math.random() * 3),
+            dermatologists: Math.floor(Math.random() * 2),
+            pharmacies: Math.floor(Math.random() * 8),
+            dispensaries: Math.floor(Math.random() * 5),
+            orders_count: Math.floor(Math.random() * 15),
+            orders_value: Math.floor(Math.random() * 5000) + 1000,
+            summary: `Daily activities for ${reportDate.toDateString()} in ${medrep.region} region`
+          });
+        }
+      }
+    }
+    
+    if (sampleReports.length > 0) {
+      await DailyReport.insertMany(sampleReports);
+      console.log(`✅ Created ${sampleReports.length} sample reports`);
+    } else {
+      console.log('✅ No sample reports needed - using existing data');
+    }
+    
+  } catch (error) {
+    console.error('❌ Error creating sample reports:', error);
   }
 }
 
-module.exports = db;
+module.exports = connectDB;

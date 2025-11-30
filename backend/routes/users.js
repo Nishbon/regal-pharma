@@ -2,49 +2,36 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const db = require('../config/database');
+const User = require('../models/User');
 const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Get all users (supervisor only)
-router.get('/', requireRole(['supervisor']), (req, res) => {
-  const sql = `
-    SELECT id, username, name, email, role, region, is_active, created_at 
-    FROM users 
-    ORDER BY name
-  `;
-
-  db.all(sql, [], (err, users) => {
-    if (err) {
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
-    }
+router.get('/', requireRole(['supervisor']), async (req, res) => {
+  try {
+    const users = await User.find({})
+      .select('-password') // Exclude password field
+      .sort({ name: 1 });
 
     res.json({
       success: true,
       data: users
     });
-  });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 // Get user by ID
-router.get('/:id', requireRole(['supervisor']), (req, res) => {
-  const sql = `
-    SELECT id, username, name, email, role, region, is_active, created_at 
-    FROM users 
-    WHERE id = ?
-  `;
-
-  db.get(sql, [req.params.id], (err, user) => {
-    if (err) {
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Database error' 
-      });
-    }
+router.get('/:id', requireRole(['supervisor']), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('-password'); // Exclude password field
 
     if (!user) {
       return res.status(404).json({ 
@@ -57,7 +44,13 @@ router.get('/:id', requireRole(['supervisor']), (req, res) => {
       success: true,
       data: user
     });
-  });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error' 
+    });
+  }
 });
 
 // Create new user (supervisor only)
@@ -68,27 +61,21 @@ router.post('/', [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Valid email is required'),
   body('role').isIn(['medrep', 'supervisor']).withMessage('Role must be medrep or supervisor')
-], (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Validation failed', 
-      errors: errors.array() 
-    });
-  }
-
-  const { username, password, name, email, role, region } = req.body;
-
-  // Check if username already exists
-  db.get('SELECT id FROM users WHERE username = ?', [username], (err, existingUser) => {
-    if (err) {
-      return res.status(500).json({ 
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
         success: false, 
-        message: 'Database error' 
+        message: 'Validation failed', 
+        errors: errors.array() 
       });
     }
 
+    const { username, password, name, email, role, region } = req.body;
+
+    // Check if username already exists
+    const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ 
         success: false, 
@@ -96,29 +83,38 @@ router.post('/', [
       });
     }
 
-    // Hash password
-    const hashedPassword = bcrypt.hashSync(password, 10);
-
-    const sql = `
-      INSERT INTO users (username, password, name, email, role, region) 
-      VALUES (?, ?, ?, ?, ?, ?)
-    `;
-
-    db.run(sql, [username, hashedPassword, name, email, role, region], function(err) {
-      if (err) {
-        return res.status(500).json({ 
-          success: false, 
-          message: 'Failed to create user' 
-        });
-      }
-
-      res.status(201).json({
-        success: true,
-        message: 'User created successfully',
-        data: { userId: this.lastID }
-      });
+    // Create new user - password will be automatically hashed by the User model
+    const user = new User({
+      username,
+      password, // Will be hashed automatically by the model's pre-save hook
+      name,
+      email,
+      role,
+      region
     });
-  });
+
+    await user.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      data: { userId: user._id }
+    });
+  } catch (error) {
+    console.error('Create user error:', error);
+    
+    if (error.code === 11000) { // MongoDB duplicate key error
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username or email already exists' 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to create user' 
+    });
+  }
 });
 
 // Update user
@@ -126,33 +122,41 @@ router.put('/:id', [
   requireRole(['supervisor']),
   body('name').optional().notEmpty().withMessage('Name cannot be empty'),
   body('email').optional().isEmail().withMessage('Valid email is required')
-], (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Validation failed', 
-      errors: errors.array() 
-    });
-  }
-
-  const { name, email, role, region, is_active } = req.body;
-
-  const sql = `
-    UPDATE users 
-    SET name = ?, email = ?, role = ?, region = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP 
-    WHERE id = ?
-  `;
-
-  db.run(sql, [name, email, role, region, is_active, req.params.id], function(err) {
-    if (err) {
-      return res.status(500).json({ 
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
         success: false, 
-        message: 'Failed to update user' 
+        message: 'Validation failed', 
+        errors: errors.array() 
       });
     }
 
-    if (this.changes === 0) {
+    const { name, email, role, region, is_active } = req.body;
+
+    const updateData = { 
+      name, 
+      email, 
+      role, 
+      region, 
+      is_active 
+    };
+
+    // Remove undefined fields
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
       return res.status(404).json({ 
         success: false, 
         message: 'User not found' 
@@ -161,24 +165,36 @@ router.put('/:id', [
 
     res.json({
       success: true,
-      message: 'User updated successfully'
+      message: 'User updated successfully',
+      data: user
     });
-  });
+  } catch (error) {
+    console.error('Update user error:', error);
+    
+    if (error.code === 11000) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email already exists' 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to update user' 
+    });
+  }
 });
 
 // Delete user (soft delete)
-router.delete('/:id', requireRole(['supervisor']), (req, res) => {
-  const sql = 'UPDATE users SET is_active = 0 WHERE id = ?';
+router.delete('/:id', requireRole(['supervisor']), async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { is_active: false },
+      { new: true }
+    );
 
-  db.run(sql, [req.params.id], function(err) {
-    if (err) {
-      return res.status(500).json({ 
-        success: false, 
-        message: 'Failed to delete user' 
-      });
-    }
-
-    if (this.changes === 0) {
+    if (!user) {
       return res.status(404).json({ 
         success: false, 
         message: 'User not found' 
@@ -189,7 +205,13 @@ router.delete('/:id', requireRole(['supervisor']), (req, res) => {
       success: true,
       message: 'User deleted successfully'
     });
-  });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to delete user' 
+    });
+  }
 });
 
 module.exports = router;
