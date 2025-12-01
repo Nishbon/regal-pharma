@@ -1,91 +1,72 @@
 const express = require('express');
 const DailyReport = require('../models/DailyReport');
 const User = require('../models/User');
-// REMOVE THIS LINE: const { requireRole } = require('../middleware/auth');
-
 const router = express.Router();
 
-// Temporary bypass middleware - ADD THIS
-const bypassAuth = (req, res, next) => {
-  console.log('🔓 Bypassing auth for analytics route');
-  
-  // Extract user info from token if available
-  const authHeader = req.headers.authorization;
-  let userRole = 'medrep';
-  let username = 'test';
-  let userId = 'user-test';
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '');
-    console.log('📝 Token received:', token.substring(0, 30) + '...');
-    
-    if (token.includes('debug-token-')) {
-      const parts = token.split('-');
-      username = parts.length >= 4 ? parts[3] : 'test';
-      userId = `user-${username}`;
-      userRole = username === 'admin' ? 'supervisor' : 'medrep';
-    } else if (token.includes('debug-signature')) {
-      try {
-        const parts = token.split('.');
-        if (parts.length >= 2) {
-          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-          username = payload.username || 'test';
-          userId = payload.userId || `user-${username}`;
-          userRole = payload.role || 'medrep';
-        }
-      } catch (e) {
-        console.log('Could not parse JWT token');
-      }
-    }
-  }
-  
-  // Set user on request object
-  req.user = {
-    id: userId,
-    username: username,
-    role: userRole,
-    name: username === 'admin' ? 'Admin User' : 
-          username === 'bonte' ? 'Bonte' : 
-          username === 'john' ? 'John Doe' : 'Test User'
-  };
-  
-  console.log(`✅ User set: ${username} (${userRole})`);
-  next();
-};
-
-// Apply bypassAuth to ALL routes in this file
-router.use(bypassAuth);
-
-// Get weekly stats for user (FOR MEDREP DASHBOARD)
+// Get weekly stats for user - FETCH REAL DATA
 router.get('/weekly', async (req, res) => {
   try {
     console.log('📊 Weekly stats requested by:', req.user.username);
     
-    // For testing, return mock data
-    const mockWeeklyStats = [
-      {
-        report_date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
-        total_doctors: 8,
-        total_pharmacies: 3,
-        total_dispensaries: 2,
-        total_orders: 5,
-        total_value: 4500
-      },
-      {
-        report_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-        total_doctors: 6,
-        total_pharmacies: 4,
-        total_dispensaries: 1,
-        total_orders: 3,
-        total_value: 3200
-      },
-      // Add more mock data as needed
-    ];
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    // Try to find user in database
+    const dbUser = await User.findOne({ username: req.user.username });
+    
+    let weeklyStats = [];
+    
+    if (dbUser) {
+      // Fetch real data for this user
+      weeklyStats = await DailyReport.aggregate([
+        {
+          $match: {
+            user_id: dbUser._id,
+            report_date: { $gte: oneWeekAgo }
+          }
+        },
+        {
+          $group: {
+            _id: '$report_date',
+            total_doctors: {
+              $sum: {
+                $add: [
+                  '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                  '$general_practitioners', '$pediatricians', '$dermatologists'
+                ]
+              }
+            },
+            total_pharmacies: { $sum: '$pharmacies' },
+            total_dispensaries: { $sum: '$dispensaries' },
+            total_orders: { $sum: '$orders_count' },
+            total_value: { $sum: '$orders_value' }
+          }
+        },
+        {
+          $project: {
+            report_date: '$_id',
+            total_doctors: 1,
+            total_pharmacies: 1,
+            total_dispensaries: 1,
+            total_orders: 1,
+            total_value: 1,
+            _id: 0
+          }
+        },
+        { $sort: { report_date: -1 } }
+      ]);
+      
+      console.log(`✅ Found ${weeklyStats.length} weekly reports for ${req.user.username}`);
+    } else {
+      // If user not in DB, return empty array
+      console.log(`⚠️ User ${req.user.username} not found in database, returning empty stats`);
+    }
     
     res.json({
       success: true,
-      data: mockWeeklyStats,
-      user: req.user
+      data: weeklyStats,
+      user: req.user.username,
+      source: dbUser ? 'MongoDB' : 'Debug user (no data)'
     });
   } catch (error) {
     console.error('Weekly stats error:', error);
@@ -97,35 +78,74 @@ router.get('/weekly', async (req, res) => {
   }
 });
 
-// Get monthly stats for user (FOR MEDREP ANALYTICS)
+// Get monthly stats for user - FETCH REAL DATA
 router.get('/monthly', async (req, res) => {
   try {
     console.log('📈 Monthly stats requested by:', req.user.username);
     
-    // Mock monthly data
-    const mockMonthlyStats = [
-      {
-        month: '2024-01',
-        total_doctors: 45,
-        total_pharmacies: 22,
-        total_dispensaries: 15,
-        total_orders: 38,
-        total_value: 28500
-      },
-      {
-        month: '2023-12',
-        total_doctors: 42,
-        total_pharmacies: 20,
-        total_dispensaries: 12,
-        total_orders: 35,
-        total_value: 26500
-      },
-    ];
+    const dbUser = await User.findOne({ username: req.user.username });
+    
+    let monthlyStats = [];
+    
+    if (dbUser) {
+      monthlyStats = await DailyReport.aggregate([
+        {
+          $match: {
+            user_id: dbUser._id
+          }
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$report_date' },
+              month: { $month: '$report_date' }
+            },
+            total_doctors: {
+              $sum: {
+                $add: [
+                  '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                  '$general_practitioners', '$pediatricians', '$dermatologists'
+                ]
+              }
+            },
+            total_pharmacies: { $sum: '$pharmacies' },
+            total_dispensaries: { $sum: '$dispensaries' },
+            total_orders: { $sum: '$orders_count' },
+            total_value: { $sum: '$orders_value' }
+          }
+        },
+        {
+          $project: {
+            month: {
+              $dateToString: {
+                format: '%Y-%m',
+                date: {
+                  $dateFromParts: {
+                    year: '$_id.year',
+                    month: '$_id.month'
+                  }
+                }
+              }
+            },
+            total_doctors: 1,
+            total_pharmacies: 1,
+            total_dispensaries: 1,
+            total_orders: 1,
+            total_value: 1,
+            _id: 0
+          }
+        },
+        { $sort: { month: -1 } },
+        { $limit: 12 }
+      ]);
+      
+      console.log(`✅ Found monthly stats for ${req.user.username}`);
+    }
     
     res.json({
       success: true,
-      data: mockMonthlyStats,
-      user: req.user
+      data: monthlyStats,
+      user: req.user.username
     });
   } catch (error) {
     console.error('Monthly stats error:', error);
@@ -136,86 +156,163 @@ router.get('/monthly', async (req, res) => {
   }
 });
 
-// Supervisor analytics - team performance
-// REMOVED: requireRole(['supervisor'])
+// Supervisor analytics - team performance - FETCH REAL DATA
 router.get('/team-performance', async (req, res) => {
   try {
     console.log('👥 Team performance requested by:', req.user.username);
     
-    // Allow access to everyone for testing
-    // In production, you'd check: if (req.user.role !== 'supervisor') return res.status(403)...
+    const { period = 'month' } = req.query;
     
-    const mockTeamPerformance = [
+    let dateFilter = {};
+    if (period === 'week') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      dateFilter.report_date = { $gte: oneWeekAgo };
+    } else if (period === 'month') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+      dateFilter.report_date = { $gte: oneMonthAgo };
+    }
+    
+    // Fetch REAL team performance from MongoDB
+    const teamPerformance = await User.aggregate([
       {
-        user_id: 'user-bonte',
-        user_name: 'Bonte',
-        region: 'North',
-        reports_count: 15,
-        total_doctors: 45,
-        total_pharmacies: 22,
-        total_dispensaries: 15,
-        total_orders: 38,
-        total_value: 28500
+        $match: {
+          role: 'medrep',
+          is_active: true
+        }
       },
       {
-        user_id: 'user-john',
-        user_name: 'John Doe',
-        region: 'South',
-        reports_count: 12,
-        total_doctors: 38,
-        total_pharmacies: 18,
-        total_dispensaries: 10,
-        total_orders: 28,
-        total_value: 22000
+        $lookup: {
+          from: 'dailyreports',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$user_id', '$$userId'] },
+                ...dateFilter
+              }
+            }
+          ],
+          as: 'reports'
+        }
       },
-    ];
+      {
+        $project: {
+          user_id: '$_id',
+          user_name: '$name',
+          username: '$username',
+          region: '$region',
+          reports_count: { $size: '$reports' },
+          total_doctors: {
+            $sum: {
+              $map: {
+                input: '$reports',
+                as: 'report',
+                in: {
+                  $add: [
+                    '$$report.dentists', '$$report.physiotherapists', '$$report.gynecologists',
+                    '$$report.internists', '$$report.general_practitioners', 
+                    '$$report.pediatricians', '$$report.dermatologists'
+                  ]
+                }
+              }
+            }
+          },
+          total_pharmacies: { $sum: '$reports.pharmacies' },
+          total_dispensaries: { $sum: '$reports.dispensaries' },
+          total_orders: { $sum: '$reports.orders_count' },
+          total_value: { $sum: '$reports.orders_value' }
+        }
+      },
+      { $sort: { total_value: -1 } }
+    ]);
+    
+    console.log(`✅ Found team performance data for ${teamPerformance.length} medreps`);
     
     res.json({
       success: true,
-      data: mockTeamPerformance,
+      data: teamPerformance,
       requested_by: req.user.username,
-      note: 'Auth bypassed for testing'
+      count: teamPerformance.length,
+      period: period,
+      source: 'MongoDB'
     });
   } catch (error) {
     console.error('Team performance error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Database error'
+      message: 'Database error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// Region-wise analytics
-// REMOVED: requireRole(['supervisor'])
+// Region-wise analytics - FETCH REAL DATA
 router.get('/region-performance', async (req, res) => {
   try {
     console.log('🗺️ Region performance requested by:', req.user.username);
     
-    const mockRegionPerformance = [
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+
+    const regionPerformance = await DailyReport.aggregate([
       {
-        region: 'North',
-        active_reps: 3,
-        total_doctors: 120,
-        total_pharmacies: 45,
-        total_dispensaries: 28,
-        total_orders: 95,
-        total_value: 85000
+        $match: {
+          report_date: { $gte: oneMonthAgo }
+        }
       },
       {
-        region: 'South',
-        active_reps: 2,
-        total_doctors: 85,
-        total_pharmacies: 32,
-        total_dispensaries: 20,
-        total_orders: 68,
-        total_value: 62000
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'user'
+        }
       },
-    ];
+      {
+        $unwind: '$user'
+      },
+      {
+        $group: {
+          _id: '$user.region',
+          active_reps: { $addToSet: '$user_id' },
+          total_doctors: {
+            $sum: {
+              $add: [
+                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                '$general_practitioners', '$pediatricians', '$dermatologists'
+              ]
+            }
+          },
+          total_pharmacies: { $sum: '$pharmacies' },
+          total_dispensaries: { $sum: '$dispensaries' },
+          total_orders: { $sum: '$orders_count' },
+          total_value: { $sum: '$orders_value' }
+        }
+      },
+      {
+        $project: {
+          region: '$_id',
+          active_reps: { $size: '$active_reps' },
+          total_doctors: 1,
+          total_pharmacies: 1,
+          total_dispensaries: 1,
+          total_orders: 1,
+          total_value: 1,
+          _id: 0
+        }
+      },
+      { $sort: { total_value: -1 } }
+    ]);
+
+    console.log(`✅ Found region performance for ${regionPerformance.length} regions`);
     
     res.json({
       success: true,
-      data: mockRegionPerformance,
-      requested_by: req.user.username
+      data: regionPerformance,
+      requested_by: req.user.username,
+      source: 'MongoDB'
     });
   } catch (error) {
     console.error('Region performance error:', error);
@@ -226,12 +323,140 @@ router.get('/region-performance', async (req, res) => {
   }
 });
 
+// Dashboard summary stats - FETCH REAL DATA
+router.get('/dashboard-summary', async (req, res) => {
+  try {
+    console.log('📊 Dashboard summary requested by:', req.user.username);
+    
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const startOfWeek = new Date(today.setDate(today.getDate() - 7));
+    const startOfMonth = new Date(today.setDate(today.getDate() - 30));
+    
+    // Get user from database
+    const dbUser = await User.findOne({ username: req.user.username });
+    
+    let userStats = {};
+    let teamStats = {};
+    
+    if (dbUser) {
+      // User's today stats
+      const todayStats = await DailyReport.findOne({
+        user_id: dbUser._id,
+        report_date: { $gte: startOfDay }
+      });
+      
+      // User's weekly stats
+      const weeklyAgg = await DailyReport.aggregate([
+        {
+          $match: {
+            user_id: dbUser._id,
+            report_date: { $gte: startOfWeek }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total_doctors: {
+              $sum: {
+                $add: [
+                  '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                  '$general_practitioners', '$pediatricians', '$dermatologists'
+                ]
+              }
+            },
+            total_visits: {
+              $sum: {
+                $add: [
+                  '$dentists', '$physiotherapists', '$gynecologists', '$internists',
+                  '$general_practitioners', '$pediatricians', '$dermatologists',
+                  '$pharmacies', '$dispensaries'
+                ]
+              }
+            },
+            total_orders: { $sum: '$orders_count' },
+            total_value: { $sum: '$orders_value' }
+          }
+        }
+      ]);
+      
+      userStats = {
+        today: todayStats ? {
+          doctors: todayStats.dentists + todayStats.physiotherapists + todayStats.gynecologists +
+                  todayStats.internists + todayStats.general_practitioners +
+                  todayStats.pediatricians + todayStats.dermatologists,
+          pharmacies: todayStats.pharmacies,
+          dispensaries: todayStats.dispensaries,
+          orders: todayStats.orders_count,
+          value: todayStats.orders_value
+        } : { doctors: 0, pharmacies: 0, dispensaries: 0, orders: 0, value: 0 },
+        weekly: weeklyAgg[0] || { total_doctors: 0, total_visits: 0, total_orders: 0, total_value: 0 }
+      };
+    }
+    
+    // If supervisor, get team stats
+    if (req.user.role === 'supervisor') {
+      const activeMedreps = await User.countDocuments({ 
+        role: 'medrep', 
+        is_active: true 
+      });
+      
+      const teamWeeklyStats = await DailyReport.aggregate([
+        {
+          $match: {
+            report_date: { $gte: startOfWeek }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total_reports: { $sum: 1 },
+            total_orders: { $sum: '$orders_count' },
+            total_value: { $sum: '$orders_value' }
+          }
+        }
+      ]);
+      
+      teamStats = {
+        active_medreps: activeMedreps,
+        weekly_reports: teamWeeklyStats[0]?.total_reports || 0,
+        weekly_orders: teamWeeklyStats[0]?.total_orders || 0,
+        weekly_value: teamWeeklyStats[0]?.total_value || 0
+      };
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user: userStats,
+        team: teamStats,
+        user_role: req.user.role,
+        username: req.user.username
+      }
+    });
+  } catch (error) {
+    console.error('Dashboard summary error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Database error'
+    });
+  }
+});
+
 // Add a simple test endpoint
 router.get('/test', async (req, res) => {
+  // Test database connection
+  const userCount = await User.countDocuments();
+  const reportCount = await DailyReport.countDocuments();
+  
   res.json({
     success: true,
     message: 'Analytics API is working',
     user: req.user,
+    database_stats: {
+      users: userCount,
+      reports: reportCount
+    },
     timestamp: new Date().toISOString()
   });
 });
