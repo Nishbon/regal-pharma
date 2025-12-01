@@ -9,6 +9,8 @@ const ReportsHistory = () => {
   const [selectedReport, setSelectedReport] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalReports, setTotalReports] = useState(0)
+  const [error, setError] = useState('')
   const reportsPerPage = 10
 
   useEffect(() => {
@@ -17,30 +19,84 @@ const ReportsHistory = () => {
 
   const loadReports = async () => {
     try {
+      setLoading(true)
+      setError('')
+      console.log('📋 Loading reports page:', currentPage)
+      
       const response = await reportsAPI.getMyReports(currentPage, reportsPerPage)
+      console.log('📊 Reports API response:', response.data)
+      
       if (response.data.success) {
-        setReports(response.data.data.reports || [])
-        setTotalPages(response.data.data.pagination?.pages || 1)
+        // Handle different response structures
+        let reportsData = []
+        let paginationData = {}
+        let totalCount = 0
+        
+        if (response.data.data?.reports) {
+          // Structure: { data: { reports: [], pagination: {} } }
+          reportsData = response.data.data.reports
+          paginationData = response.data.data.pagination || {}
+          totalCount = paginationData.total || reportsData.length
+        } else if (Array.isArray(response.data.data)) {
+          // Structure: { data: [] }
+          reportsData = response.data.data
+          totalCount = response.data.data.length
+        } else if (response.data.data?.data) {
+          // Structure: { data: { data: [] } }
+          reportsData = response.data.data.data
+          totalCount = response.data.data.total || reportsData.length
+        }
+        
+        console.log('📋 Processed reports:', reportsData.length)
+        console.log('Sample report:', reportsData[0])
+        
+        setReports(reportsData)
+        setTotalReports(totalCount)
+        setTotalPages(paginationData.pages || Math.ceil(totalCount / reportsPerPage) || 1)
+      } else {
+        setError('Failed to load reports')
       }
     } catch (error) {
-      console.error('Failed to load reports:', error)
+      console.error('❌ Failed to load reports:', error)
+      setError(error.response?.data?.message || 'Failed to load reports')
     }
     setLoading(false)
   }
 
   const calculateTotalDoctors = (report) => {
-    return report.dentists + report.physiotherapists + report.gynecologists + 
-           report.internists + report.general_practitioners + 
-           report.pediatricians + report.dermatologists
+    if (!report) return 0
+    return (
+      (report.dentists || 0) +
+      (report.physiotherapists || 0) +
+      (report.gynecologists || 0) +
+      (report.internists || 0) +
+      (report.general_practitioners || 0) +
+      (report.pediatricians || 0) +
+      (report.dermatologists || 0)
+    )
+  }
+
+  const calculateTotalVisits = (report) => {
+    if (!report) return 0
+    return calculateTotalDoctors(report) + (report.pharmacies || 0) + (report.dispensaries || 0)
   }
 
   const getTotalStats = () => {
     return reports.reduce((stats, report) => ({
       totalDoctors: stats.totalDoctors + calculateTotalDoctors(report),
-      totalPharmacies: stats.totalPharmacies + report.pharmacies,
-      totalOrders: stats.totalOrders + report.orders_count,
-      totalValue: stats.totalValue + report.orders_value
-    }), { totalDoctors: 0, totalPharmacies: 0, totalOrders: 0, totalValue: 0 })
+      totalPharmacies: stats.totalPharmacies + (report.pharmacies || 0),
+      totalDispensaries: stats.totalDispensaries + (report.dispensaries || 0),
+      totalOrders: stats.totalOrders + (report.orders_count || 0),
+      totalValue: stats.totalValue + (report.orders_value || 0),
+      totalReports: stats.totalReports + 1
+    }), { 
+      totalDoctors: 0, 
+      totalPharmacies: 0, 
+      totalDispensaries: 0, 
+      totalOrders: 0, 
+      totalValue: 0,
+      totalReports: 0 
+    })
   }
 
   const viewReportDetails = (report) => {
@@ -51,19 +107,36 @@ const ReportsHistory = () => {
     setSelectedReport(null)
   }
 
-  if (loading) {
+  const refreshReports = () => {
+    setCurrentPage(1)
+    loadReports()
+  }
+
+  if (loading && reports.length === 0) {
     return (
       <div style={{ 
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center', 
-        height: '50vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        borderRadius: '15px',
-        color: 'white',
-        fontSize: '18px'
+        height: '80vh',
+        flexDirection: 'column',
+        gap: '20px'
       }}>
-        Loading your reports...
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '5px solid #f3f3f3',
+          borderTop: '5px solid #667eea',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <div style={{ color: '#667eea', fontSize: '18px' }}>Loading your reports...</div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     )
   }
@@ -79,15 +152,66 @@ const ReportsHistory = () => {
         padding: '30px',
         borderRadius: '15px',
         marginBottom: '30px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
+        boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+        position: 'relative'
       }}>
+        <button
+          onClick={refreshReports}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(255,255,255,0.2)',
+            color: 'white',
+            border: '1px solid rgba(255,255,255,0.3)',
+            borderRadius: '50px',
+            padding: '8px 16px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+        >
+          🔄 Refresh
+        </button>
+
         <h1 style={{ margin: '0 0 10px 0', fontSize: '2.2em', fontWeight: '300' }}>
           My Reports History 📊
         </h1>
         <p style={{ margin: '0', fontSize: '1.1em', opacity: '0.9' }}>
-          View and manage all your submitted daily reports
+          {reports.length > 0 ? `${stats.totalReports} reports • ${user?.region || 'All Regions'}` : 'No reports yet'}
         </p>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div style={{
+          background: '#f8d7da',
+          color: '#721c24',
+          padding: '15px 20px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          border: '1px solid #f5c6cb'
+        }}>
+          ⚠️ {error}
+          <button 
+            onClick={refreshReports}
+            style={{
+              marginLeft: '15px',
+              background: '#721c24',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '5px 10px',
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Statistics Summary */}
       {reports.length > 0 && (
@@ -104,8 +228,8 @@ const ReportsHistory = () => {
             icon="👨‍⚕️"
           />
           <StatCard 
-            value={stats.totalPharmacies} 
-            label="Total Pharmacies Visited"
+            value={stats.totalPharmacies + stats.totalDispensaries} 
+            label="Total Facilities Visited"
             color="#2ecc71"
             icon="💊"
           />
@@ -139,8 +263,17 @@ const ReportsHistory = () => {
           marginBottom: '25px'
         }}>
           <h2 style={{ margin: '0', color: '#2c3e50', fontSize: '1.5em' }}>
-            All Reports ({reports.length})
+            All Reports ({reports.length} of {totalReports})
           </h2>
+          <div style={{ 
+            fontSize: '0.9em', 
+            color: '#7f8c8d',
+            background: '#f8f9fa',
+            padding: '5px 15px',
+            borderRadius: '20px'
+          }}>
+            Page {currentPage} of {totalPages}
+          </div>
         </div>
 
         {reports.length === 0 ? (
@@ -149,22 +282,24 @@ const ReportsHistory = () => {
             padding: '60px 20px',
             color: '#7f8c8d'
           }}>
-            <div style={{ fontSize: '4em', marginBottom: '20px' }}>📝</div>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Reports Yet</h3>
-            <p style={{ margin: '0 0 25px 0', fontSize: '1.1em' }}>
-              You haven't submitted any daily reports yet.
+            <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>📝</div>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Reports Found</h3>
+            <p style={{ margin: '0 0 25px 0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
+              You haven't submitted any daily reports yet. Start tracking your activities by submitting your first report!
             </p>
             <button 
               onClick={() => window.location.href = '/daily-report'}
               style={{
+                display: 'inline-block',
                 padding: '12px 30px',
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '25px',
                 fontSize: '1em',
+                fontWeight: '600',
                 cursor: 'pointer',
-                fontWeight: '500'
+                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
               }}
             >
               Submit Your First Report
@@ -172,7 +307,7 @@ const ReportsHistory = () => {
           </div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e9ecef' }}>
               <table style={{ 
                 width: '100%', 
                 borderCollapse: 'collapse',
@@ -180,25 +315,91 @@ const ReportsHistory = () => {
               }}>
                 <thead>
                   <tr style={{ 
-                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-                    borderBottom: '2px solid #dee2e6'
+                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
                   }}>
-                    <th style={{ padding: '15px', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Date</th>
-                    <th style={{ padding: '15px', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>Region</th>
-                    <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Doctors</th>
-                    <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Pharmacies</th>
-                    <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Orders</th>
-                    <th style={{ padding: '15px', textAlign: 'right', fontWeight: '600', color: '#2c3e50' }}>Value (RWF)</th>
-                    <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Actions</th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'left', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      Date
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'left', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      Region
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'center', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      👨‍⚕️ Doctors
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'center', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      💊 Pharmacies
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'center', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      🏥 Dispensaries
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'center', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      📦 Orders
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'right', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      💰 Value
+                    </th>
+                    <th style={{ 
+                      padding: '15px', 
+                      textAlign: 'center', 
+                      fontWeight: '600', 
+                      color: '#2c3e50',
+                      borderBottom: '2px solid #dee2e6'
+                    }}>
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {reports.map((report, index) => (
                     <ReportRow 
-                      key={report.id} 
+                      key={report._id || report.id || index} 
                       report={report} 
                       index={index}
                       onViewDetails={viewReportDetails}
+                      calculateTotalDoctors={calculateTotalDoctors}
+                      calculateTotalVisits={calculateTotalVisits}
                     />
                   ))}
                 </tbody>
@@ -218,32 +419,92 @@ const ReportsHistory = () => {
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                   style={{
-                    padding: '8px 15px',
+                    padding: '10px 20px',
                     border: '1px solid #dee2e6',
-                    background: 'white',
-                    borderRadius: '5px',
+                    background: currentPage === 1 ? '#f8f9fa' : 'white',
+                    borderRadius: '8px',
                     cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.5 : 1
+                    opacity: currentPage === 1 ? 0.6 : 1,
+                    fontWeight: '500',
+                    fontSize: '0.9em',
+                    transition: 'all 0.2s ease',
+                    ':hover': currentPage !== 1 ? {
+                      background: '#667eea',
+                      color: 'white',
+                      borderColor: '#667eea'
+                    } : {}
                   }}
                 >
-                  Previous
+                  ← Previous
                 </button>
-                <span style={{ color: '#6c757d', padding: '0 15px' }}>
-                  Page {currentPage} of {totalPages}
-                </span>
+                
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '5px',
+                  alignItems: 'center' 
+                }}>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum
+                    if (totalPages <= 5) {
+                      pageNum = i + 1
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i
+                    } else {
+                      pageNum = currentPage - 2 + i
+                    }
+                    
+                    if (pageNum < 1 || pageNum > totalPages) return null
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '1px solid #dee2e6',
+                          background: currentPage === pageNum ? '#667eea' : 'white',
+                          color: currentPage === pageNum ? 'white' : '#6c757d',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          fontWeight: currentPage === pageNum ? '600' : '500',
+                          fontSize: '0.9em',
+                          minWidth: '36px',
+                          transition: 'all 0.2s ease',
+                          ':hover': currentPage !== pageNum ? {
+                            background: '#f8f9fa',
+                            borderColor: '#667eea'
+                          } : {}
+                        }}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  })}
+                </div>
+                
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                   style={{
-                    padding: '8px 15px',
+                    padding: '10px 20px',
                     border: '1px solid #dee2e6',
-                    background: 'white',
-                    borderRadius: '5px',
+                    background: currentPage === totalPages ? '#f8f9fa' : 'white',
+                    borderRadius: '8px',
                     cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === totalPages ? 0.5 : 1
+                    opacity: currentPage === totalPages ? 0.6 : 1,
+                    fontWeight: '500',
+                    fontSize: '0.9em',
+                    transition: 'all 0.2s ease',
+                    ':hover': currentPage !== totalPages ? {
+                      background: '#667eea',
+                      color: 'white',
+                      borderColor: '#667eea'
+                    } : {}
                   }}
                 >
-                  Next
+                  Next →
                 </button>
               </div>
             )}
@@ -257,55 +518,151 @@ const ReportsHistory = () => {
           report={selectedReport} 
           onClose={closeReportDetails}
           calculateTotalDoctors={calculateTotalDoctors}
+          calculateTotalVisits={calculateTotalVisits}
         />
+      )}
+
+      {/* Debug Info */}
+      {process.env.NODE_ENV === 'development' && reports.length > 0 && (
+        <div style={{
+          background: '#f8f9fa',
+          padding: '15px 20px',
+          borderRadius: '10px',
+          fontSize: '0.85em',
+          color: '#7f8c8d',
+          marginTop: '20px',
+          border: '1px solid #e9ecef'
+        }}>
+          <strong>ℹ️ Debug Info:</strong> Showing {reports.length} reports. First report ID: {reports[0]?._id || reports[0]?.id || 'N/A'}
+          <button 
+            onClick={() => console.log('All reports:', reports)}
+            style={{
+              marginLeft: '15px',
+              background: '#6c757d',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              padding: '3px 8px',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+          >
+            Log Data
+          </button>
+        </div>
       )}
     </div>
   )
 }
 
 // Report Row Component
-const ReportRow = ({ report, index, onViewDetails }) => {
-  const totalDoctors = report.dentists + report.physiotherapists + report.gynecologists + 
-                      report.internists + report.general_practitioners + 
-                      report.pediatricians + report.dermatologists
+const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors, calculateTotalVisits }) => {
+  const totalDoctors = calculateTotalDoctors(report)
+  const totalVisits = calculateTotalVisits(report)
+  
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      })
+    } catch {
+      return 'Invalid Date'
+    }
+  }
 
   return (
     <tr style={{ 
       borderBottom: '1px solid #e9ecef',
       background: index % 2 === 0 ? '#f8f9fa' : 'white',
-      transition: 'background-color 0.2s ease'
+      transition: 'all 0.2s ease',
+      ':hover': {
+        background: '#e9ecef'
+      }
     }}>
-      <td style={{ padding: '15px', fontWeight: '500', color: '#2c3e50' }}>
-        {new Date(report.report_date).toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric' 
-        })}
+      <td style={{ 
+        padding: '15px', 
+        fontWeight: '500', 
+        color: '#2c3e50',
+        whiteSpace: 'nowrap'
+      }}>
+        {formatDate(report.report_date || report.createdAt)}
       </td>
-      <td style={{ padding: '15px', color: '#6c757d' }}>{report.region}</td>
-      <td style={{ padding: '15px', textAlign: 'center', color: '#3498db', fontWeight: '600' }}>
+      <td style={{ 
+        padding: '15px', 
+        color: '#6c757d',
+        maxWidth: '150px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }}>
+        {report.region || 'N/A'}
+      </td>
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'center', 
+        color: '#3498db', 
+        fontWeight: '600'
+      }}>
         {totalDoctors}
       </td>
-      <td style={{ padding: '15px', textAlign: 'center', color: '#2ecc71', fontWeight: '600' }}>
-        {report.pharmacies}
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'center', 
+        color: '#2ecc71', 
+        fontWeight: '600'
+      }}>
+        {report.pharmacies || 0}
       </td>
-      <td style={{ padding: '15px', textAlign: 'center', color: '#e74c3c', fontWeight: '600' }}>
-        {report.orders_count}
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'center', 
+        color: '#27ae60', 
+        fontWeight: '600'
+      }}>
+        {report.dispensaries || 0}
       </td>
-      <td style={{ padding: '15px', textAlign: 'right', color: '#f39c12', fontWeight: '600' }}>
-        {report.orders_value.toLocaleString()}
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'center', 
+        color: '#e74c3c', 
+        fontWeight: '600'
+      }}>
+        {report.orders_count || 0}
       </td>
-      <td style={{ padding: '15px', textAlign: 'center' }}>
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'right', 
+        color: '#f39c12', 
+        fontWeight: '600',
+        whiteSpace: 'nowrap'
+      }}>
+        RWF {(report.orders_value || 0).toLocaleString()}
+      </td>
+      <td style={{ 
+        padding: '15px', 
+        textAlign: 'center',
+        whiteSpace: 'nowrap'
+      }}>
         <button
           onClick={() => onViewDetails(report)}
           style={{
-            padding: '6px 12px',
+            padding: '8px 16px',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
             border: 'none',
-            borderRadius: '5px',
+            borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '0.85em'
+            fontSize: '0.85em',
+            fontWeight: '500',
+            transition: 'all 0.2s ease',
+            boxShadow: '0 2px 5px rgba(102, 126, 234, 0.3)',
+            ':hover': {
+              transform: 'translateY(-2px)',
+              boxShadow: '0 4px 10px rgba(102, 126, 234, 0.4)'
+            }
           }}
         >
           View Details
@@ -315,9 +672,24 @@ const ReportRow = ({ report, index, onViewDetails }) => {
   )
 }
 
-// Report Details Modal Component
-const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
+// Report Details Modal Component (Updated)
+const ReportDetails = ({ report, onClose, calculateTotalDoctors, calculateTotalVisits }) => {
   const totalDoctors = calculateTotalDoctors(report)
+  const totalVisits = calculateTotalVisits(report)
+  
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })
+    } catch {
+      return 'Invalid Date'
+    }
+  }
 
   return (
     <div style={{
@@ -338,71 +710,99 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
         padding: '30px',
         borderRadius: '15px',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        maxWidth: '600px',
+        maxWidth: '700px',
         width: '100%',
         maxHeight: '90vh',
-        overflowY: 'auto'
+        overflowY: 'auto',
+        position: 'relative'
       }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          marginBottom: '25px'
-        }}>
-          <h2 style={{ margin: '0', color: '#2c3e50' }}>Report Details</h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: '1.5em',
-              cursor: 'pointer',
-              color: '#6c757d'
-            }}
-          >
-            ✕
-          </button>
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: '15px',
+            right: '15px',
+            background: '#f8f9fa',
+            border: 'none',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.2em',
+            color: '#6c757d',
+            transition: 'all 0.2s ease',
+            ':hover': {
+              background: '#e9ecef',
+              color: '#dc3545'
+            }
+          }}
+        >
+          ✕
+        </button>
+
+        <div style={{ marginBottom: '25px' }}>
+          <h2 style={{ 
+            margin: '0 0 10px 0', 
+            color: '#2c3e50', 
+            fontSize: '1.6em' 
+          }}>
+            📋 Report Details
+          </h2>
+          <p style={{ margin: '0', color: '#6c757d', fontSize: '0.95em' }}>
+            Submitted on {formatDate(report.report_date || report.createdAt)}
+          </p>
         </div>
 
-        <div style={{ display: 'grid', gap: '20px' }}>
+        <div style={{ display: 'grid', gap: '25px' }}>
+          {/* Quick Stats */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '15px',
+            padding: '20px',
+            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+            borderRadius: '10px'
+          }}>
+            <StatItem label="Total Visits" value={totalVisits} icon="👣" color="#667eea" />
+            <StatItem label="Total Doctors" value={totalDoctors} icon="👨‍⚕️" color="#3498db" />
+            <StatItem label="Total Orders" value={report.orders_count || 0} icon="📦" color="#e74c3c" />
+            <StatItem label="Order Value" value={`RWF ${(report.orders_value || 0).toLocaleString()}`} icon="💰" color="#f39c12" />
+          </div>
+
           <DetailSection title="📅 Basic Information">
-            <DetailItem label="Date" value={new Date(report.report_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} />
-            <DetailItem label="Region" value={report.region} />
+            <DetailItem label="Report Date" value={formatDate(report.report_date)} />
+            <DetailItem label="Region" value={report.region || 'Not specified'} />
+            <DetailItem label="Submitted At" value={new Date(report.createdAt || report.submitted_at).toLocaleString()} />
           </DetailSection>
 
           <DetailSection title="👨‍⚕️ Doctors Visited">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <DetailItem label="Dentists" value={report.dentists} />
-              <DetailItem label="Physiotherapists" value={report.physiotherapists} />
-              <DetailItem label="Gynecologists" value={report.gynecologists} />
-              <DetailItem label="Internists" value={report.internists} />
-              <DetailItem label="General Practitioners" value={report.general_practitioners} />
-              <DetailItem label="Pediatricians" value={report.pediatricians} />
-              <DetailItem label="Dermatologists" value={report.dermatologists} />
-            </div>
             <div style={{ 
-              background: '#e3f2fd', 
-              padding: '10px 15px', 
-              borderRadius: '5px', 
-              marginTop: '10px',
-              fontWeight: '600',
-              color: '#1976d2'
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', 
+              gap: '15px' 
             }}>
-              Total Doctors: {totalDoctors}
+              <DetailItem label="🧑‍⚕️ Dentists" value={report.dentists || 0} />
+              <DetailItem label="💪 Physiotherapists" value={report.physiotherapists || 0} />
+              <DetailItem label="👩‍⚕️ Gynecologists" value={report.gynecologists || 0} />
+              <DetailItem label="🫀 Internists" value={report.internists || 0} />
+              <DetailItem label="🩺 General Practitioners" value={report.general_practitioners || 0} />
+              <DetailItem label="👶 Pediatricians" value={report.pediatricians || 0} />
+              <DetailItem label="🌟 Dermatologists" value={report.dermatologists || 0} />
             </div>
           </DetailSection>
 
           <DetailSection title="💊 Facilities Visited">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <DetailItem label="Pharmacies" value={report.pharmacies} />
-              <DetailItem label="Dispensaries" value={report.dispensaries} />
-            </div>
-          </DetailSection>
-
-          <DetailSection title="📦 Orders">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <DetailItem label="Number of Orders" value={report.orders_count} />
-              <DetailItem label="Total Value" value={`RWF ${report.orders_value.toLocaleString()}`} />
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
+              gap: '15px' 
+            }}>
+              <DetailItem label="🏥 Pharmacies" value={report.pharmacies || 0} />
+              <DetailItem label="💊 Dispensaries" value={report.dispensaries || 0} />
             </div>
           </DetailSection>
 
@@ -410,9 +810,12 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
             <DetailSection title="📝 Daily Summary">
               <div style={{ 
                 background: '#f8f9fa', 
-                padding: '15px', 
-                borderRadius: '8px',
-                border: '1px solid #e9ecef'
+                padding: '20px', 
+                borderRadius: '10px',
+                border: '1px solid #e9ecef',
+                lineHeight: '1.6',
+                color: '#495057',
+                fontSize: '0.95em'
               }}>
                 {report.summary}
               </div>
@@ -430,9 +833,9 @@ const DetailSection = ({ title, children }) => (
     <h3 style={{ 
       margin: '0 0 15px 0', 
       color: '#2c3e50', 
-      fontSize: '1.2em',
-      paddingBottom: '8px',
-      borderBottom: '1px solid #e9ecef'
+      fontSize: '1.3em',
+      paddingBottom: '10px',
+      borderBottom: '2px solid #e9ecef'
     }}>
       {title}
     </h3>
@@ -441,9 +844,48 @@ const DetailSection = ({ title, children }) => (
 )
 
 const DetailItem = ({ label, value }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-    <span style={{ color: '#6c757d', fontWeight: '500' }}>{label}:</span>
-    <span style={{ color: '#2c3e50', fontWeight: '600' }}>{value}</span>
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    padding: '8px 0',
+    borderBottom: '1px dashed #e9ecef'
+  }}>
+    <span style={{ color: '#6c757d', fontWeight: '500', fontSize: '0.95em' }}>{label}:</span>
+    <span style={{ 
+      color: '#2c3e50', 
+      fontWeight: '600',
+      fontSize: '1em'
+    }}>{value}</span>
+  </div>
+)
+
+const StatItem = ({ label, value, icon, color }) => (
+  <div style={{ 
+    textAlign: 'center',
+    padding: '15px',
+    background: 'white',
+    borderRadius: '8px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+  }}>
+    <div style={{ 
+      fontSize: '1.8em', 
+      marginBottom: '8px',
+      color: color
+    }}>{icon}</div>
+    <div style={{ 
+      fontSize: '1.4em', 
+      fontWeight: 'bold', 
+      color: color,
+      marginBottom: '5px'
+    }}>
+      {value}
+    </div>
+    <div style={{ 
+      color: '#6c757d', 
+      fontSize: '0.85em',
+      fontWeight: '500'
+    }}>{label}</div>
   </div>
 )
 
@@ -454,14 +896,19 @@ const StatCard = ({ value, label, color, icon }) => (
     borderRadius: '12px',
     boxShadow: '0 3px 10px rgba(0,0,0,0.08)',
     textAlign: 'center',
-    borderLeft: `4px solid ${color}`
+    borderTop: `4px solid ${color}`,
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    ':hover': {
+      transform: 'translateY(-5px)',
+      boxShadow: '0 5px 20px rgba(0,0,0,0.12)'
+    }
   }}>
-    <div style={{ fontSize: '2em', marginBottom: '8px' }}>{icon}</div>
+    <div style={{ fontSize: '2.5em', marginBottom: '10px' }}>{icon}</div>
     <div style={{ 
-      fontSize: '1.5em', 
+      fontSize: '1.8em', 
       fontWeight: 'bold', 
       color: color,
-      marginBottom: '5px'
+      marginBottom: '8px'
     }}>
       {value}
     </div>
