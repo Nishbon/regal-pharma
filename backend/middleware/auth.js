@@ -1,6 +1,6 @@
-// backend/middleware/auth.js
+// backend/middleware/auth.js - MONGODB VERSION
 const jwt = require('jsonwebtoken');
-const db = require('../config/database');
+const User = require('../models/User'); // MongoDB User model
 
 const JWT_SECRET = process.env.JWT_SECRET || 'medical-reporting-system-secret-key-2023';
 
@@ -15,7 +15,7 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) {
       return res.status(403).json({ 
         success: false, 
@@ -23,23 +23,33 @@ const authenticateToken = (req, res, next) => {
       });
     }
 
-    // Verify user still exists and is active
-    db.get('SELECT id, username, name, role, region FROM users WHERE id = ? AND is_active = 1', 
-      [user.id], (err, dbUser) => {
-        if (err || !dbUser) {
-          return res.status(403).json({ 
-            success: false, 
-            message: 'User not found or inactive' 
-          });
-        }
-        
-        req.user = dbUser;
-        next();
+    try {
+      // Verify user still exists and is active in MongoDB
+      const user = await User.findOne({ 
+        _id: decoded.id, 
+        is_active: true 
+      }).select('-password');
+
+      if (!user) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'User not found or inactive' 
+        });
+      }
+      
+      // Convert MongoDB document to plain object and add to request
+      req.user = user.toObject();
+      next();
+    } catch (error) {
+      console.error('Auth middleware error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Server error during authentication' 
       });
+    }
   });
 };
 
-// ADD THIS MISSING FUNCTION:
 const requireRole = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
