@@ -46,7 +46,8 @@ const DailyReport = () => {
 
     // Convert empty strings to 0 for numbers
     const submitData = {
-      ...formData,
+      report_date: formData.report_date,
+      region: formData.region,
       dentists: parseInt(formData.dentists) || 0,
       physiotherapists: parseInt(formData.physiotherapists) || 0,
       gynecologists: parseInt(formData.gynecologists) || 0,
@@ -57,13 +58,22 @@ const DailyReport = () => {
       pharmacies: parseInt(formData.pharmacies) || 0,
       dispensaries: parseInt(formData.dispensaries) || 0,
       orders_count: parseInt(formData.orders_count) || 0,
-      orders_value: parseInt(formData.orders_value) || 0
+      orders_value: parseInt(formData.orders_value) || 0,
+      summary: formData.summary || ''
     }
+
+    console.log('📤 Submitting report:', submitData)
 
     try {
       const response = await reportsAPI.submitDaily(submitData)
+      console.log('✅ API Response:', response.data)
+      
       if (response.data.success) {
-        setMessage({ type: 'success', text: '🎉 Report submitted successfully!' })
+        setMessage({ 
+          type: 'success', 
+          text: '🎉 Report submitted successfully! Refreshing dashboard...' 
+        })
+        
         // Reset form but keep region and date
         setFormData({
           report_date: new Date().toISOString().split('T')[0],
@@ -81,11 +91,39 @@ const DailyReport = () => {
           orders_value: '',
           summary: ''
         })
+        
+        // Trigger dashboard refresh
+        setTimeout(() => {
+          const event = new CustomEvent('reportSubmitted')
+          window.dispatchEvent(event)
+          setMessage({ 
+            type: 'success', 
+            text: '✅ Report saved! Dashboard has been updated.' 
+          })
+        }, 1500)
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: response.data.message || 'Failed to submit report.' 
+        })
       }
     } catch (error) {
+      console.error('❌ Submit error:', error)
+      console.error('Error response:', error.response?.data)
+      
+      let errorMessage = 'Failed to submit report. Please try again.'
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.message.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please check your connection.'
+      }
+      
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.message || 'Failed to submit report. Please try again.' 
+        text: errorMessage 
       })
     }
     setLoading(false)
