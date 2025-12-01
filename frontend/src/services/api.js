@@ -8,6 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 10000, // Add timeout
 });
 
 // Request interceptor to add auth token
@@ -28,10 +29,22 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const originalRequest = error.config;
+    
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Only redirect if not already on login page
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
+    
+    // Handle network errors
+    if (!error.response) {
+      console.error('Network error:', error.message);
+      // You could show a toast notification here
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -41,7 +54,21 @@ export const authAPI = {
     api.post('/auth/login', { username, password }),
   
   logout: () => 
-    api.post('/auth/logout')
+    api.post('/auth/logout'),
+  
+  // ADD THIS - Essential for user profile
+  getProfile: () => 
+    api.get('/auth/profile'),
+  
+  // Optional but useful
+  refreshToken: () => 
+    api.post('/auth/refresh'),
+  
+  validateToken: () => 
+    api.get('/auth/validate'),
+  
+  changePassword: (data) => 
+    api.post('/auth/change-password', data)
 };
 
 export const reportsAPI = {
@@ -55,7 +82,14 @@ export const reportsAPI = {
     api.get(`/reports/${id}`),
   
   updateReport: (id, data) => 
-    api.put(`/reports/${id}`, data)
+    api.put(`/reports/${id}`, data),
+  
+  // Optional: Add more endpoints
+  deleteReport: (id) => 
+    api.delete(`/reports/${id}`),
+  
+  getReportsByDate: (date) => 
+    api.get(`/reports/by-date?date=${date}`)
 };
 
 export const analyticsAPI = {
@@ -73,7 +107,14 @@ export const analyticsAPI = {
     api.get(`/analytics/team-performance?period=${period}`),
   
   getRegionPerformance: () => 
-    api.get('/analytics/region-performance')
+    api.get('/analytics/region-performance'),
+  
+  // Optional: Add more analytics endpoints
+  getPersonalStats: (userId) => 
+    api.get(`/analytics/personal/${userId}`),
+  
+  getTrends: (period = 'month') => 
+    api.get(`/analytics/trends?period=${period}`)
 };
 
 export const usersAPI = {
@@ -84,7 +125,58 @@ export const usersAPI = {
     api.post('/users', data),
   
   update: (id, data) => 
-    api.put(`/users/${id}`, data)
+    api.put(`/users/${id}`, data),
+  
+  // Optional: Add more user endpoints
+  getById: (id) => 
+    api.get(`/users/${id}`),
+  
+  delete: (id) => 
+    api.delete(`/users/${id}`),
+  
+  getTeamMembers: () => 
+    api.get('/users/team'),
+  
+  updateProfile: (data) => 
+    api.put('/users/profile', data)
 };
+
+// Add utility function for handling errors
+export const handleApiError = (error) => {
+  if (error.response) {
+    // Server responded with error status
+    return {
+      success: false,
+      message: error.response.data?.message || 'Server error occurred',
+      status: error.response.status,
+      data: error.response.data
+    };
+  } else if (error.request) {
+    // Request made but no response
+    return {
+      success: false,
+      message: 'No response from server. Please check your connection.'
+    };
+  } else {
+    // Other errors
+    return {
+      success: false,
+      message: error.message || 'An error occurred'
+    };
+  }
+};
+
+// Add request/response logging in development
+if (import.meta.env.DEV) {
+  api.interceptors.request.use(request => {
+    console.log('Request:', request);
+    return request;
+  });
+  
+  api.interceptors.response.use(response => {
+    console.log('Response:', response);
+    return response;
+  });
+}
 
 export default api;
