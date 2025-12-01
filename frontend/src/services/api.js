@@ -1,14 +1,18 @@
 // frontend/src/services/api.js
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Use your Render backend URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
+                     'https://regal-pharma-backend.onrender.com/api';
+
+console.log('API Base URL:', API_BASE_URL); // Debug - remove in production
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // Add timeout
+  timeout: 30000, // Increased timeout for Render free tier (slow cold starts)
 });
 
 // Request interceptor to add auth token
@@ -18,18 +22,43 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add cache busting for development
+    if (import.meta.env.DEV) {
+      config.params = {
+        ...config.params,
+        _t: Date.now()
+      };
+    }
+    
+    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`); // Debug
     return config;
   },
   (error) => {
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`API Response: ${response.status} ${response.config.url}`); // Debug
+    return response;
+  },
   (error) => {
-    const originalRequest = error.config;
+    console.error('API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message: error.message,
+      response: error.response?.data
+    });
+    
+    if (error.code === 'ECONNABORTED') {
+      console.error('Request timeout - Render might be spinning up');
+      // You could trigger a retry here
+    }
     
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
@@ -39,10 +68,11 @@ api.interceptors.response.use(
       }
     }
     
-    // Handle network errors
+    // Handle network errors specifically
     if (!error.response) {
-      console.error('Network error:', error.message);
-      // You could show a toast notification here
+      if (error.message.includes('Network Error')) {
+        error.message = 'Cannot connect to server. The backend service might be starting up. Please wait 30 seconds and try again.';
+      }
     }
     
     return Promise.reject(error);
@@ -56,11 +86,9 @@ export const authAPI = {
   logout: () => 
     api.post('/auth/logout'),
   
-  // ADD THIS - Essential for user profile
   getProfile: () => 
     api.get('/auth/profile'),
   
-  // Optional but useful
   refreshToken: () => 
     api.post('/auth/refresh'),
   
@@ -68,7 +96,11 @@ export const authAPI = {
     api.get('/auth/validate'),
   
   changePassword: (data) => 
-    api.post('/auth/change-password', data)
+    api.post('/auth/change-password', data),
+  
+  // Health check endpoint
+  healthCheck: () => 
+    api.get('/health', { timeout: 10000 })
 };
 
 export const reportsAPI = {
@@ -84,7 +116,6 @@ export const reportsAPI = {
   updateReport: (id, data) => 
     api.put(`/reports/${id}`, data),
   
-  // Optional: Add more endpoints
   deleteReport: (id) => 
     api.delete(`/reports/${id}`),
   
@@ -109,7 +140,6 @@ export const analyticsAPI = {
   getRegionPerformance: () => 
     api.get('/analytics/region-performance'),
   
-  // Optional: Add more analytics endpoints
   getPersonalStats: (userId) => 
     api.get(`/analytics/personal/${userId}`),
   
@@ -127,7 +157,6 @@ export const usersAPI = {
   update: (id, data) => 
     api.put(`/users/${id}`, data),
   
-  // Optional: Add more user endpoints
   getById: (id) => 
     api.get(`/users/${id}`),
   
@@ -141,42 +170,42 @@ export const usersAPI = {
     api.put('/users/profile', data)
 };
 
-// Add utility function for handling errors
-export const handleApiError = (error) => {
-  if (error.response) {
-    // Server responded with error status
-    return {
-      success: false,
-      message: error.response.data?.message || 'Server error occurred',
-      status: error.response.status,
-      data: error.response.data
-    };
-  } else if (error.request) {
-    // Request made but no response
-    return {
-      success: false,
-      message: 'No response from server. Please check your connection.'
-    };
-  } else {
-    // Other errors
-    return {
-      success: false,
-      message: error.message || 'An error occurred'
-    };
+// Utility function to wait for backend to wake up (Render cold start)
+export const waitForBackend = async (maxAttempts = 10, delay = 5000) => {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`Checking backend... Attempt ${attempt}/${maxAttempts}`);
+      const response = await authAPI.healthCheck();
+      if (response.status === 200) {
+        console.log('Backend is ready!');
+        return true;
+      }
+    } catch (error) {
+      console.log(`Backend not ready yet (${error.message}). Waiting ${delay/1000}s...`);
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+  throw new Error('Backend service did not start in time. Please try again in 30 seconds.');
 };
 
-// Add request/response logging in development
-if (import.meta.env.DEV) {
-  api.interceptors.request.use(request => {
-    console.log('Request:', request);
-    return request;
-  });
-  
-  api.interceptors.response.use(response => {
-    console.log('Response:', response);
-    return response;
-  });
-}
+// Handle Render cold starts by retrying requests
+export const retryRequest = async (requestFn, maxRetries = 3, delay = 2000) => {
+  for (let retry = 1; retry <= maxRetries; retry++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      if (retry === maxRetries) throw error;
+      
+      if (error.code === 'ECONNABORTED' || !error.response) {
+        console.log(`Retry ${retry}/${maxRetries} after ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay * retry));
+      } else {
+        throw error;
+      }
+    }
+  }
+};
 
 export default api;
