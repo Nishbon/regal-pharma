@@ -23,80 +23,86 @@ const connectDB = async () => {
   }
 };
 
-// Create default users
+// Create default users - IMPORT MODELS INSIDE FUNCTION
 async function createDefaultUsers() {
-  const User = require('../models/User');
-  const bcrypt = require('bcryptjs');
-  
-  const defaultUsers = [
-    {
-      username: 'admin',
-      password: 'admin123',
-      name: 'System Administrator',
-      email: 'admin@medicalreports.com',
-      role: 'supervisor'
-    },
-    {
-      username: 'bonte',
-      password: 'bonte123', 
-      name: 'Bonte',
-      email: 'bonte@company.com',
-      role: 'medrep',
-      region: 'Kigali'
-    },
-    {
-      username: 'liliane',
-      password: 'liliane123',
-      name: 'Liliane', 
-      email: 'liliane@company.com',
-      role: 'medrep',
-      region: 'Eastern'
-    },
-    {
-      username: 'deborah',
-      password: 'deborah123',
-      name: 'Deborah',
-      email: 'deborah@company.com', 
-      role: 'medrep',
-      region: 'Western'
-    },
-    {
-      username: 'valens',
-      password: 'valens123',
-      name: 'Valens',
-      email: 'valens@company.com',
-      role: 'medrep', 
-      region: 'Northern'
-    }
-  ];
-
-  let createdCount = 0;
-  
-  for (const userData of defaultUsers) {
-    try {
-      const existingUser = await User.findOne({ username: userData.username });
-      if (!existingUser) {
-        const user = new User(userData);
-        await user.save();
-        console.log(`✅ Created user: ${userData.name}`);
-        createdCount++;
-      } else {
-        console.log(`✅ User already exists: ${userData.name}`);
+  try {
+    // Import inside function to avoid circular dependency
+    const User = require('../models/User');
+    const bcrypt = require('bcryptjs');
+    
+    const defaultUsers = [
+      {
+        username: 'admin',
+        password: 'admin123',
+        name: 'System Administrator',
+        email: 'admin@medicalreports.com',
+        role: 'supervisor'
+      },
+      {
+        username: 'bonte',
+        password: 'bonte123', 
+        name: 'Bonte',
+        email: 'bonte@company.com',
+        role: 'medrep',
+        region: 'Kigali'
+      },
+      {
+        username: 'liliane',
+        password: 'liliane123',
+        name: 'Liliane', 
+        email: 'liliane@company.com',
+        role: 'medrep',
+        region: 'Eastern'
+      },
+      {
+        username: 'deborah',
+        password: 'deborah123',
+        name: 'Deborah',
+        email: 'deborah@company.com', 
+        role: 'medrep',
+        region: 'Western'
+      },
+      {
+        username: 'valens',
+        password: 'valens123',
+        name: 'Valens',
+        email: 'valens@company.com',
+        role: 'medrep', 
+        region: 'Northern'
       }
-    } catch (error) {
-      console.error(`❌ Error creating user ${userData.name}:`, error.message);
+    ];
+
+    let createdCount = 0;
+    
+    for (const userData of defaultUsers) {
+      try {
+        const existingUser = await User.findOne({ username: userData.username });
+        if (!existingUser) {
+          const user = new User(userData);
+          await user.save();
+          console.log(`✅ Created user: ${userData.name}`);
+          createdCount++;
+        } else {
+          console.log(`✅ User already exists: ${userData.name}`);
+        }
+      } catch (error) {
+        console.error(`❌ Error creating user ${userData.name}:`, error.message);
+      }
     }
+    
+    console.log(`🎉 User setup complete. ${createdCount} users checked/created.`);
+  } catch (error) {
+    console.error('❌ Error in createDefaultUsers:', error);
   }
-  
-  console.log(`🎉 User setup complete. ${createdCount} users checked/created.`);
 }
 
-// Create sample reports
+// Create sample reports - IMPORT MODELS INSIDE FUNCTION
 async function createSampleReports() {
-  const DailyReport = require('../models/DailyReport');
-  const User = require('../models/User');
-  
   try {
+    // Import inside function to avoid circular dependency
+    const DailyReport = require('../models/DailyReport');
+    const User = require('../models/User');
+    
     // Check if reports already exist
     const existingReports = await DailyReport.countDocuments();
     if (existingReports > 0) {
