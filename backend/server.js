@@ -73,10 +73,64 @@ console.log('\nLOADING ROUTES...');
 // Public routes (no authentication required)
 app.use('/api/auth', authRoutes);
 
-// Protected routes (authentication handled in route files)
-app.use('/api/reports', reportRoutes);        // Authentication handled in reports.js
-app.use('/api/analytics', analyticsRoutes);   // Authentication handled in analytics.js
-app.use('/api/users', userRoutes);           // Authentication handled in users.js
+// ====================== TEMPORARY AUTH BYPASS ======================
+console.log('⚠️  WARNING: Authentication bypass is ENABLED for testing');
+console.log('   All protected routes will accept requests without valid tokens\n');
+
+// Simple middleware to bypass authentication for ALL protected routes
+const bypassAuth = (req, res, next) => {
+  // Extract username from token if present (for role detection)
+  const authHeader = req.headers.authorization;
+  let userRole = 'medrep';
+  let username = 'guest';
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Try to extract username from debug token
+    if (token.includes('debug-token-')) {
+      const parts = token.split('-');
+      if (parts.length >= 4) {
+        username = parts[3];
+        // Set role based on username
+        userRole = (username === 'admin') ? 'supervisor' : 'medrep';
+      }
+    } else if (token.includes('debug-signature')) {
+      // For JWT-like debug tokens
+      try {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+          username = payload.username || 'debug-user';
+          userRole = payload.role || 'medrep';
+        }
+      } catch (err) {
+        // If can't parse, use defaults
+      }
+    }
+  }
+  
+  // Set user object for the request
+  req.user = {
+    id: `temp-${Date.now()}`,
+    username: username,
+    role: userRole,
+    name: username === 'admin' ? 'Admin User' : 
+          username === 'bonte' ? 'Bonte' : 
+          username === 'john' ? 'John Doe' : 'Test User',
+    email: `${username}@regalpharma.com`,
+    region: 'Test Region',
+    isDebug: true
+  };
+  
+  console.log(`✅ Auth bypass: ${req.method} ${req.originalUrl} - User: ${username} (${userRole})`);
+  next();
+};
+
+// Apply bypass auth to all protected routes
+app.use('/api/reports', bypassAuth, reportRoutes);
+app.use('/api/analytics', bypassAuth, analyticsRoutes);
+app.use('/api/users', bypassAuth, userRoutes);
 
 console.log('✅ All routes loaded successfully\n');
 
@@ -102,7 +156,8 @@ app.get('/', (req, res) => {
         'GET  /api/reports/my-reports',
         'GET  /api/analytics/weekly',
         'GET  /api/users'
-      ]
+      ],
+      note: '⚠️ Authentication is temporarily bypassed for testing'
     }
   });
 });
@@ -114,7 +169,8 @@ app.get('/health', (req, res) => {
     message: 'Server is healthy',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    authStatus: 'BYPASSED (Testing Mode)'
   });
 });
 
@@ -122,7 +178,8 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
     message: 'API Server is running', 
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    authMode: 'Debug - No authentication required'
   });
 });
 
@@ -130,7 +187,7 @@ app.get('/api/health', (req, res) => {
 app.post('/api/debug-login', (req, res) => {
   const { username, password } = req.body;
   
-  console.log('Debug login:', username);
+  console.log('Debug login attempt:', username);
   
   const testUsers = {
     'admin': { 
@@ -159,11 +216,24 @@ app.post('/api/debug-login', (req, res) => {
   const user = testUsers[username];
   
   if (user && user.password === password) {
-    const token = `debug-token-${Date.now()}-${username}`;
+    // Create a JWT-like token (will be accepted by bypass middleware)
+    const payload = {
+      userId: `user-${username}`,
+      username: username,
+      role: user.role,
+      exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 7)
+    };
+    
+    // Create JWT format token
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
+    const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const token = `${header}.${payloadEncoded}.debug-signature`;
+    
+    console.log(`✅ Debug login successful for ${username} (Role: ${user.role})`);
     
     res.json({
       success: true,
-      message: 'Login successful (debug route)',
+      message: 'Login successful (debug mode)',
       data: {
         token: token,
         user: {
@@ -181,16 +251,37 @@ app.post('/api/debug-login', (req, res) => {
     res.status(401).json({
       success: false,
       message: 'Invalid credentials',
-      availableUsers: Object.keys(testUsers)
+      availableUsers: Object.keys(testUsers),
+      testCredentials: [
+        { username: 'admin', password: 'admin123', role: 'supervisor' },
+        { username: 'bonte', password: 'bonte123', role: 'medrep' },
+        { username: 'john', password: 'john123', role: 'medrep' }
+      ]
     });
   }
 });
 
-app.get('/api/debug-simple', (req, res) => {
+// Test endpoint to verify auth bypass
+app.get('/api/debug-auth-test', (req, res) => {
   res.json({
     success: true,
-    message: 'Simple debug route works',
-    timestamp: new Date().toISOString()
+    message: 'Auth test endpoint',
+    user: req.user || { message: 'No user object found' },
+    headers: {
+      authorization: req.headers.authorization || 'No auth header'
+    },
+    note: 'This endpoint should work without authentication'
+  });
+});
+
+// Test protected endpoint simulation
+app.get('/api/debug-protected-test', bypassAuth, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Protected endpoint simulation',
+    user: req.user,
+    access: 'Granted via auth bypass',
+    dashboardRedirect: req.user.role === 'supervisor' ? 'Will go to Supervisor Dashboard' : 'Will go to MedRep Dashboard'
   });
 });
 
@@ -239,11 +330,19 @@ app.listen(PORT, () => {
   console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
   console.log(`📊 MongoDB: ${process.env.MONGODB_URI ? 'Connected' : 'Not configured'}`);
   console.log('='.repeat(50));
-  console.log('\n📋 Available Endpoints:');
-  console.log('   GET  /                    - Server info');
-  console.log('   GET  /health              - Health check');
-  console.log('   POST /api/debug-login     - Test login (username: bonte, password: bonte123)');
-  console.log('   POST /api/auth/login      - Real login');
-  console.log('   POST /api/reports/daily   - Submit daily report (requires auth)');
-  console.log('\n✅ Server ready!');
+  console.log('\n⚠️  IMPORTANT: AUTHENTICATION IS BYPASSED');
+  console.log('   All protected routes will accept requests without valid tokens');
+  console.log('   Use for testing dashboard routing only\n');
+  console.log('📋 Available Endpoints:');
+  console.log('   GET  /                         - Server info');
+  console.log('   GET  /health                   - Health check');
+  console.log('   POST /api/debug-login          - Test login');
+  console.log('   GET  /api/debug-auth-test      - Auth test');
+  console.log('   POST /api/reports/daily        - Submit report (bypassed auth)');
+  console.log('   GET  /api/reports/my-reports   - View reports (bypassed auth)');
+  console.log('\n👤 Test Users:');
+  console.log('   admin / admin123   → Supervisor Dashboard');
+  console.log('   bonte / bonte123   → MedRep Dashboard');
+  console.log('   john  / john123    → MedRep Dashboard');
+  console.log('\n✅ Server ready! Auth bypass enabled for testing.');
 });
