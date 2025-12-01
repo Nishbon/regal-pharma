@@ -17,59 +17,51 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
 
-  // Function to fetch user profile
-  const fetchUserProfile = async () => {
-    try {
-      const response = await authAPI.getProfile();
-      if (response.data.success) {
-        setUser(response.data.data);
-      } else {
-        // If no profile endpoint, check if we have token
-        const token = localStorage.getItem('token');
-        if (token) {
-          // You might want to decode JWT to get basic user info
-          // Or create a mock user object based on token
-          setUser({ username: 'User', role: 'medrep' });
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch profile:', error);
-      // Don't clear token here, let interceptor handle it
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Initialize auth state
+  // Initialize auth state from localStorage on app start
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetchUserProfile();
-      } else {
+      try {
+        const storedToken = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+        
+        if (storedToken && storedUser) {
+          // Set token and user from localStorage
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+          console.log('✅ Auth initialized from localStorage');
+        }
+      } catch (error) {
+        console.error('❌ Error initializing auth:', error);
+        // Clear corrupted data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } finally {
         setLoading(false);
       }
     };
-    
+
     initAuth();
   }, []);
 
   const login = async (username, password) => {
     try {
-      console.log('Logging in with:', username);
+      console.log('🔐 Attempting login with:', username);
       
       const response = await authAPI.login(username, password);
-      console.log('API Response:', response.data);
+      console.log('📦 Login response:', response.data);
       
       if (response.data.success) {
         const { token, user } = response.data.data;
         
-        // Store token
+        // Store everything in localStorage
         localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        // Update state
         setToken(token);
         setUser(user);
         
-        console.log('Login successful, user role:', user.role);
+        console.log('✅ Login successful, user role:', user.role);
         
         return { 
           success: true,
@@ -82,13 +74,12 @@ export const AuthProvider = ({ children }) => {
         };
       }
     } catch (error) {
-      console.error('Login API error:', error);
+      console.error('❌ Login error:', error);
       
       let errorMessage = 'Login failed. Please try again.';
       
       if (error.response) {
         errorMessage = error.response.data?.message || 
-                      error.response.data?.error ||
                       `Server error: ${error.response.status}`;
       } else if (error.request) {
         errorMessage = 'No response from server. Please check your connection.';
@@ -101,22 +92,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = async () => {
-    try {
-      await authAPI.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      localStorage.removeItem('token');
-      setToken(null);
-      setUser(null);
-      // Use window.location to ensure complete reset
-      window.location.href = '/login';
-    }
-  };
-
-  const updateUser = (userData) => {
-    setUser(prev => ({ ...prev, ...userData }));
+  const logout = () => {
+    console.log('🚪 Logging out...');
+    
+    // Clear everything
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
+    // Reset state
+    setToken(null);
+    setUser(null);
+    
+    // Navigate to login
+    window.location.href = '/login';
   };
 
   const value = {
@@ -124,8 +112,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     loading,
-    token,
-    updateUser
+    token
   };
 
   return (
