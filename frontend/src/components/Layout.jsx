@@ -38,7 +38,11 @@ const Layout = () => {
   const navItems = getNavItems()
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+    <div style={{ 
+      minHeight: '100vh', 
+      background: '#f8fafc',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif"
+    }}>
       {/* Header */}
       <header style={{
         background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
@@ -46,7 +50,7 @@ const Layout = () => {
         padding: '16px 0',
         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
       }}>
-        <div className="container">
+        <div style={containerStyle}>
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -68,7 +72,7 @@ const Layout = () => {
               </div>
               <div>
                 <div style={{ fontSize: '20px', fontWeight: '700' }}>
-                  MedTrack Pro
+                  Regal Pharma
                 </div>
                 <div style={{ 
                   fontSize: '12px', 
@@ -91,7 +95,7 @@ const Layout = () => {
                 <span style={{ marginRight: '8px' }}>
                   {user?.role === 'supervisor' ? '👑' : '👨‍⚕️'}
                 </span>
-                {user?.name}
+                {user?.name || 'User'}
                 <span style={{ 
                   marginLeft: '8px',
                   background: 'rgba(255, 255, 255, 0.2)',
@@ -99,7 +103,7 @@ const Layout = () => {
                   borderRadius: '12px',
                   fontSize: '12px'
                 }}>
-                  {user?.role}
+                  {user?.role || 'User'}
                 </span>
               </div>
               <button 
@@ -113,7 +117,10 @@ const Layout = () => {
                   cursor: 'pointer',
                   fontSize: '14px',
                   fontWeight: '500',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
                 }}
                 onMouseOver={(e) => {
                   e.target.style.background = 'rgba(220, 38, 38, 0.9)';
@@ -124,6 +131,7 @@ const Layout = () => {
                   e.target.style.transform = 'translateY(0)';
                 }}
               >
+                <span>🚪</span>
                 Logout
               </button>
             </div>
@@ -138,7 +146,7 @@ const Layout = () => {
         boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
         borderBottom: '1px solid #e5e7eb'
       }}>
-        <div className="container">
+        <div style={containerStyle}>
           <div style={{ display: 'flex', gap: '0' }}>
             {navItems.map(item => (
               <button
@@ -153,11 +161,12 @@ const Layout = () => {
                   borderBottom: isActive(item.path) ? '3px solid #2563eb' : '3px solid transparent',
                   cursor: 'pointer',
                   fontSize: '14px',
-                  transition: 'all 0.3s ease',
+                  transition: 'all 0.2s ease',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
-                  position: 'relative'
+                  position: 'relative',
+                  whiteSpace: 'nowrap'
                 }}
                 onMouseOver={(e) => {
                   if (!isActive(item.path)) {
@@ -184,6 +193,17 @@ const Layout = () => {
                     {item.description}
                   </div>
                 </div>
+                {isActive(item.path) && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '-1px',
+                    left: '0',
+                    right: '0',
+                    height: '3px',
+                    background: '#2563eb',
+                    borderRadius: '3px 3px 0 0'
+                  }} />
+                )}
               </button>
             ))}
           </div>
@@ -191,13 +211,71 @@ const Layout = () => {
       </nav>
 
       {/* Main Content */}
-      <main style={{ minHeight: 'calc(100vh - 140px)', padding: '32px 0' }}>
-        <div className="container">
+      <main style={{ 
+        minHeight: 'calc(100vh - 140px)', 
+        padding: '32px 0',
+        background: '#f8fafc'
+      }}>
+        <div style={containerStyle}>
           <Outlet />
         </div>
       </main>
+
+      {/* Footer */}
+      <footer style={{
+        background: 'white',
+        padding: '20px 0',
+        borderTop: '1px solid #e5e7eb',
+        color: '#6b7280',
+        fontSize: '14px'
+      }}>
+        <div style={containerStyle}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '24px',
+                height: '24px',
+                background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
+                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}>
+                RP
+              </div>
+              <span>© {new Date().getFullYear()} Regal Pharma. All rights reserved.</span>
+            </div>
+            <div style={{
+              display: 'flex',
+              gap: '20px',
+              fontSize: '12px'
+            }}>
+              <a href="#" style={{ color: '#6b7280', textDecoration: 'none' }}>Privacy Policy</a>
+              <a href="#" style={{ color: '#6b7280', textDecoration: 'none' }}>Terms of Service</a>
+              <a href="#" style={{ color: '#6b7280', textDecoration: 'none' }}>Support</a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
+}
+
+// Container style
+const containerStyle = {
+  maxWidth: '1200px',
+  margin: '0 auto',
+  padding: '0 20px',
+  width: '100%'
 }
 
 export default Layout
