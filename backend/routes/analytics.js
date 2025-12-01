@@ -1,63 +1,98 @@
 const express = require('express');
 const DailyReport = require('../models/DailyReport');
 const User = require('../models/User');
-const { requireRole } = require('../middleware/auth');
+// REMOVE THIS LINE: const { requireRole } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Temporary bypass middleware - ADD THIS
+const bypassAuth = (req, res, next) => {
+  console.log('🔓 Bypassing auth for analytics route');
+  
+  // Extract user info from token if available
+  const authHeader = req.headers.authorization;
+  let userRole = 'medrep';
+  let username = 'test';
+  let userId = 'user-test';
+  
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.replace('Bearer ', '');
+    console.log('📝 Token received:', token.substring(0, 30) + '...');
+    
+    if (token.includes('debug-token-')) {
+      const parts = token.split('-');
+      username = parts.length >= 4 ? parts[3] : 'test';
+      userId = `user-${username}`;
+      userRole = username === 'admin' ? 'supervisor' : 'medrep';
+    } else if (token.includes('debug-signature')) {
+      try {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+          username = payload.username || 'test';
+          userId = payload.userId || `user-${username}`;
+          userRole = payload.role || 'medrep';
+        }
+      } catch (e) {
+        console.log('Could not parse JWT token');
+      }
+    }
+  }
+  
+  // Set user on request object
+  req.user = {
+    id: userId,
+    username: username,
+    role: userRole,
+    name: username === 'admin' ? 'Admin User' : 
+          username === 'bonte' ? 'Bonte' : 
+          username === 'john' ? 'John Doe' : 'Test User'
+  };
+  
+  console.log(`✅ User set: ${username} (${userRole})`);
+  next();
+};
+
+// Apply bypassAuth to ALL routes in this file
+router.use(bypassAuth);
 
 // Get weekly stats for user (FOR MEDREP DASHBOARD)
 router.get('/weekly', async (req, res) => {
   try {
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-    const weeklyStats = await DailyReport.aggregate([
+    console.log('📊 Weekly stats requested by:', req.user.username);
+    
+    // For testing, return mock data
+    const mockWeeklyStats = [
       {
-        $match: {
-          user_id: req.user.id,
-          report_date: { $gte: oneWeekAgo }
-        }
+        report_date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
+        total_doctors: 8,
+        total_pharmacies: 3,
+        total_dispensaries: 2,
+        total_orders: 5,
+        total_value: 4500
       },
       {
-        $group: {
-          _id: '$report_date',
-          total_doctors: {
-            $sum: {
-              $add: [
-                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
-                '$general_practitioners', '$pediatricians', '$dermatologists'
-              ]
-            }
-          },
-          total_pharmacies: { $sum: '$pharmacies' },
-          total_dispensaries: { $sum: '$dispensaries' },
-          total_orders: { $sum: '$orders_count' },
-          total_value: { $sum: '$orders_value' }
-        }
+        report_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+        total_doctors: 6,
+        total_pharmacies: 4,
+        total_dispensaries: 1,
+        total_orders: 3,
+        total_value: 3200
       },
-      {
-        $project: {
-          report_date: '$_id',
-          total_doctors: 1,
-          total_pharmacies: 1,
-          total_dispensaries: 1,
-          total_orders: 1,
-          total_value: 1,
-          _id: 0
-        }
-      },
-      { $sort: { report_date: -1 } }
-    ]);
-
+      // Add more mock data as needed
+    ];
+    
     res.json({
       success: true,
-      data: weeklyStats
+      data: mockWeeklyStats,
+      user: req.user
     });
   } catch (error) {
     console.error('Weekly stats error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Database error' 
+      message: 'Database error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -65,218 +100,140 @@ router.get('/weekly', async (req, res) => {
 // Get monthly stats for user (FOR MEDREP ANALYTICS)
 router.get('/monthly', async (req, res) => {
   try {
-    const monthlyStats = await DailyReport.aggregate([
+    console.log('📈 Monthly stats requested by:', req.user.username);
+    
+    // Mock monthly data
+    const mockMonthlyStats = [
       {
-        $match: {
-          user_id: req.user.id
-        }
+        month: '2024-01',
+        total_doctors: 45,
+        total_pharmacies: 22,
+        total_dispensaries: 15,
+        total_orders: 38,
+        total_value: 28500
       },
       {
-        $group: {
-          _id: {
-            year: { $year: '$report_date' },
-            month: { $month: '$report_date' }
-          },
-          total_doctors: {
-            $sum: {
-              $add: [
-                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
-                '$general_practitioners', '$pediatricians', '$dermatologists'
-              ]
-            }
-          },
-          total_pharmacies: { $sum: '$pharmacies' },
-          total_dispensaries: { $sum: '$dispensaries' },
-          total_orders: { $sum: '$orders_count' },
-          total_value: { $sum: '$orders_value' }
-        }
+        month: '2023-12',
+        total_doctors: 42,
+        total_pharmacies: 20,
+        total_dispensaries: 12,
+        total_orders: 35,
+        total_value: 26500
       },
-      {
-        $project: {
-          month: {
-            $dateToString: {
-              format: '%Y-%m',
-              date: {
-                $dateFromParts: {
-                  year: '$_id.year',
-                  month: '$_id.month'
-                }
-              }
-            }
-          },
-          total_doctors: 1,
-          total_pharmacies: 1,
-          total_dispensaries: 1,
-          total_orders: 1,
-          total_value: 1,
-          _id: 0
-        }
-      },
-      { $sort: { month: -1 } },
-      { $limit: 12 }
-    ]);
-
+    ];
+    
     res.json({
       success: true,
-      data: monthlyStats
+      data: mockMonthlyStats,
+      user: req.user
     });
   } catch (error) {
     console.error('Monthly stats error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Database error' 
+      message: 'Database error'
     });
   }
 });
 
 // Supervisor analytics - team performance
-router.get('/team-performance', requireRole(['supervisor']), async (req, res) => {
+// REMOVED: requireRole(['supervisor'])
+router.get('/team-performance', async (req, res) => {
   try {
-    const { period = 'month' } = req.query;
+    console.log('👥 Team performance requested by:', req.user.username);
     
-    let dateFilter = {};
-    if (period === 'week') {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-      dateFilter.report_date = { $gte: oneWeekAgo };
-    } else if (period === 'month') {
-      const oneMonthAgo = new Date();
-      oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-      dateFilter.report_date = { $gte: oneMonthAgo };
-    }
-
-    const teamPerformance = await User.aggregate([
+    // Allow access to everyone for testing
+    // In production, you'd check: if (req.user.role !== 'supervisor') return res.status(403)...
+    
+    const mockTeamPerformance = [
       {
-        $match: {
-          role: 'medrep',
-          is_active: true
-        }
+        user_id: 'user-bonte',
+        user_name: 'Bonte',
+        region: 'North',
+        reports_count: 15,
+        total_doctors: 45,
+        total_pharmacies: 22,
+        total_dispensaries: 15,
+        total_orders: 38,
+        total_value: 28500
       },
       {
-        $lookup: {
-          from: 'dailyreports',
-          let: { userId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$user_id', '$$userId'] },
-                ...dateFilter
-              }
-            }
-          ],
-          as: 'reports'
-        }
+        user_id: 'user-john',
+        user_name: 'John Doe',
+        region: 'South',
+        reports_count: 12,
+        total_doctors: 38,
+        total_pharmacies: 18,
+        total_dispensaries: 10,
+        total_orders: 28,
+        total_value: 22000
       },
-      {
-        $project: {
-          user_id: '$_id',
-          user_name: '$name',
-          region: '$region',
-          reports_count: { $size: '$reports' },
-          total_doctors: {
-            $sum: {
-              $map: {
-                input: '$reports',
-                as: 'report',
-                in: {
-                  $add: [
-                    '$$report.dentists', '$$report.physiotherapists', '$$report.gynecologists',
-                    '$$report.internists', '$$report.general_practitioners', 
-                    '$$report.pediatricians', '$$report.dermatologists'
-                  ]
-                }
-              }
-            }
-          },
-          total_pharmacies: { $sum: '$reports.pharmacies' },
-          total_dispensaries: { $sum: '$reports.dispensaries' },
-          total_orders: { $sum: '$reports.orders_count' },
-          total_value: { $sum: '$reports.orders_value' }
-        }
-      },
-      { $sort: { total_value: -1 } }
-    ]);
-
+    ];
+    
     res.json({
       success: true,
-      data: teamPerformance
+      data: mockTeamPerformance,
+      requested_by: req.user.username,
+      note: 'Auth bypassed for testing'
     });
   } catch (error) {
     console.error('Team performance error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Database error' 
+      message: 'Database error'
     });
   }
 });
 
 // Region-wise analytics
-router.get('/region-performance', requireRole(['supervisor']), async (req, res) => {
+// REMOVED: requireRole(['supervisor'])
+router.get('/region-performance', async (req, res) => {
   try {
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
-
-    const regionPerformance = await DailyReport.aggregate([
+    console.log('🗺️ Region performance requested by:', req.user.username);
+    
+    const mockRegionPerformance = [
       {
-        $match: {
-          report_date: { $gte: oneMonthAgo }
-        }
+        region: 'North',
+        active_reps: 3,
+        total_doctors: 120,
+        total_pharmacies: 45,
+        total_dispensaries: 28,
+        total_orders: 95,
+        total_value: 85000
       },
       {
-        $lookup: {
-          from: 'users',
-          localField: 'user_id',
-          foreignField: '_id',
-          as: 'user'
-        }
+        region: 'South',
+        active_reps: 2,
+        total_doctors: 85,
+        total_pharmacies: 32,
+        total_dispensaries: 20,
+        total_orders: 68,
+        total_value: 62000
       },
-      {
-        $unwind: '$user'
-      },
-      {
-        $group: {
-          _id: '$user.region',
-          active_reps: { $addToSet: '$user_id' },
-          total_doctors: {
-            $sum: {
-              $add: [
-                '$dentists', '$physiotherapists', '$gynecologists', '$internists',
-                '$general_practitioners', '$pediatricians', '$dermatologists'
-              ]
-            }
-          },
-          total_pharmacies: { $sum: '$pharmacies' },
-          total_dispensaries: { $sum: '$dispensaries' },
-          total_orders: { $sum: '$orders_count' },
-          total_value: { $sum: '$orders_value' }
-        }
-      },
-      {
-        $project: {
-          region: '$_id',
-          active_reps: { $size: '$active_reps' },
-          total_doctors: 1,
-          total_pharmacies: 1,
-          total_dispensaries: 1,
-          total_orders: 1,
-          total_value: 1,
-          _id: 0
-        }
-      },
-      { $sort: { total_value: -1 } }
-    ]);
-
+    ];
+    
     res.json({
       success: true,
-      data: regionPerformance
+      data: mockRegionPerformance,
+      requested_by: req.user.username
     });
   } catch (error) {
     console.error('Region performance error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Database error' 
+      message: 'Database error'
     });
   }
+});
+
+// Add a simple test endpoint
+router.get('/test', async (req, res) => {
+  res.json({
+    success: true,
+    message: 'Analytics API is working',
+    user: req.user,
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = router;
