@@ -1,5 +1,6 @@
 const express = require('express');
 const DailyReport = require('../models/DailyReport');
+const User = require('../models/User'); // ADD THIS IMPORT
 const router = express.Router();
 
 // Get user's reports - FETCH REAL DATA
@@ -61,3 +62,15 @@ router.get('/all', async (req, res) => {
     });
   }
 });
+
+// Add more routes as needed
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Reports API is working',
+    user: req.user
+  });
+});
+
+// CRITICAL: Add this export statement
+module.exports = router;
