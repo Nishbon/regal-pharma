@@ -1,7 +1,7 @@
-// frontend/src/components/Login.jsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { authAPI } from '../services/api'; // Import the API
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -9,6 +9,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
   
   const { user, login, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -36,21 +37,75 @@ const Login = () => {
     }
     
     setError('');
+    setDebugInfo('');
     setLoading(true);
 
     try {
-      const result = await login(username.trim(), password.trim());
-      console.log('Login result:', result);
+      console.log('🔐 Attempting login for user:', username);
       
-      if (!result.success) {
-        setError(result.message || 'Login failed. Please check your credentials.');
+      // Use the corrected API endpoint
+      const response = await authAPI.login(username.trim(), password.trim());
+      console.log('✅ Login API response:', response.data);
+      
+      if (response.data.success) {
+        const { token, user: userData } = response.data.data;
+        
+        // Debug info
+        setDebugInfo(`Login successful! Role: ${userData.role}, ID: ${userData.id}`);
+        
+        // Store token and user data
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Update auth context
+        login(userData);
+        
+        // Redirect based on role
+        setTimeout(() => {
+          if (userData.role === 'supervisor' || userData.role === 'admin') {
+            navigate('/supervisor-dashboard', { replace: true });
+          } else {
+            navigate('/dashboard', { replace: true });
+          }
+        }, 100);
+        
+      } else {
+        setError(response.data.message || 'Login failed. Please check your credentials.');
       }
-      // Navigation will be handled by useEffect or App.js routing
     } catch (err) {
-      console.error('Login handler error:', err);
-      setError('An unexpected error occurred. Please try again.');
+      console.error('❌ Login error:', err);
+      
+      // Detailed error handling
+      if (err.response) {
+        // Server responded with error
+        setError(`Server error: ${err.response.status} - ${err.response.data?.message || 'Unknown error'}`);
+        setDebugInfo(`URL: ${err.config?.url}, Status: ${err.response.status}`);
+      } else if (err.request) {
+        // No response received
+        setError('No response from server. Backend might be down or URL is incorrect.');
+        setDebugInfo('Check if backend is running on Render');
+      } else {
+        // Other errors
+        setError('Login failed: ' + err.message);
+      }
+      
+      // Show test credentials for debugging
+      setDebugInfo(prev => prev + '\n\nTest credentials:\nadmin / admin123\nbonte / bonte123\njohn / john123');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Test direct API call (for debugging)
+  const testAPI = async () => {
+    try {
+      console.log('🧪 Testing API connection...');
+      const response = await authAPI.healthCheck();
+      setDebugInfo(`API Health: ${response.status} - ${response.data.message || 'OK'}`);
+      console.log('API health response:', response.data);
+    } catch (error) {
+      setDebugInfo(`API Test Failed: ${error.message}`);
+      console.error('API test error:', error);
     }
   };
 
@@ -89,8 +144,8 @@ const Login = () => {
           }
           .loading-spinner {
             display: flex;
-            flex-direction: column;
-            align-items: center;
+            flexDirection: column;
+            alignItems: center;
             gap: 20px;
           }
           .spinner {
@@ -128,6 +183,20 @@ const Login = () => {
         maxWidth: '420px'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            background: 'linear-gradient(135deg, #3498db 0%, #2c3e50 100%)',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px auto',
+            fontSize: '36px',
+            color: 'white'
+          }}>
+            💊
+          </div>
           <h1 style={{ 
             color: '#2c3e50',
             marginBottom: '8px',
@@ -144,6 +213,25 @@ const Login = () => {
           </p>
         </div>
         
+        {/* Debug Info - Show in development */}
+        {import.meta.env.DEV && debugInfo && (
+          <div style={{
+            background: '#e8f4fd',
+            color: '#2c3e50',
+            padding: '12px 16px',
+            borderRadius: '6px',
+            marginBottom: '16px',
+            border: '1px solid #b3e0ff',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap',
+            maxHeight: '200px',
+            overflowY: 'auto'
+          }}>
+            {debugInfo}
+          </div>
+        )}
+
         {error && (
           <div style={{
             background: '#ffebee',
@@ -191,7 +279,7 @@ const Login = () => {
                 transition: 'border 0.3s',
                 outline: 'none'
               }}
-              placeholder="Enter your username"
+              placeholder="Enter username (e.g., admin, bonte)"
               onFocus={(e) => e.target.style.borderColor = '#3498db'}
               onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
@@ -245,7 +333,7 @@ const Login = () => {
                   transition: 'border 0.3s',
                   outline: 'none'
                 }}
-                placeholder="Enter your password"
+                placeholder="Enter password"
                 onFocus={(e) => e.target.style.borderColor = '#3498db'}
                 onBlur={(e) => e.target.style.borderColor = '#ddd'}
               />
@@ -286,14 +374,11 @@ const Login = () => {
                 e.target.style.boxShadow = 'none';
               }
             }}
-            onMouseDown={(e) => {
-              if (!loading) e.target.style.transform = 'translateY(0)';
-            }}
           >
             {loading ? (
               <>
                 <span style={{ fontSize: '18px' }}>⏳</span>
-                Processing...
+                Signing In...
               </>
             ) : (
               <>
@@ -303,6 +388,26 @@ const Login = () => {
             )}
           </button>
         </form>
+
+        {/* Debug button for development */}
+        {import.meta.env.DEV && (
+          <button
+            onClick={testAPI}
+            style={{
+              marginTop: '16px',
+              width: '100%',
+              padding: '10px',
+              background: '#f8f9fa',
+              color: '#6c757d',
+              border: '1px solid #dee2e6',
+              borderRadius: '6px',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            🧪 Test API Connection
+          </button>
+        )}
 
         <div style={{ 
           marginTop: '30px', 
@@ -315,7 +420,7 @@ const Login = () => {
             fontSize: '13px',
             margin: '5px 0'
           }}>
-            For assistance, contact IT Support
+            Demo: admin / admin123 • bonte / bonte123
           </p>
           <p style={{ 
             color: '#bdc3c7', 
