@@ -23,7 +23,7 @@ const MedRepDashboard = () => {
       console.log('🔄 Loading dashboard data...')
       setLoading(true)
       
-      // Load recent reports
+      // Load recent reports - using pagination parameters
       const response = await reportsAPI.getMyReports(1, 10)
       console.log('📊 API Response:', response.data)
       
@@ -37,9 +37,11 @@ const MedRepDashboard = () => {
           reports = response.data.data
         } else if (Array.isArray(response.data.data?.data)) {
           reports = response.data.data.data
+        } else if (response.data.data) {
+          reports = [response.data.data]
         }
         
-        console.log('📋 Found reports:', reports)
+        console.log('📋 Found reports:', reports.length)
         setRecentReports(reports)
         
         // Calculate stats
@@ -60,12 +62,67 @@ const MedRepDashboard = () => {
         setStats(totalStats)
       } else {
         console.warn('API returned unsuccessful response:', response.data)
+        // Fallback: Try to get all reports and filter by user
+        await tryFallbackLoad()
       }
     } catch (error) {
       console.error('❌ Error loading dashboard data:', error)
       console.error('Error details:', error.response?.data || error.message)
+      // Fallback on error
+      await tryFallbackLoad()
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fallback method if getMyReports fails
+  const tryFallbackLoad = async () => {
+    try {
+      console.log('🔄 Trying fallback load method...')
+      const allResponse = await reportsAPI.getAll()
+      
+      if (allResponse.data.success) {
+        const allReports = allResponse.data.data || []
+        console.log('📋 Total reports from getAll:', allReports.length)
+        
+        // Filter reports for current user
+        const userId = user?._id || user?.id
+        const myReports = allReports.filter(report => {
+          const reportUserId = report.user_id?._id || report.user_id || report.user
+          return reportUserId === userId
+        })
+        
+        console.log('👤 Filtered reports for current user:', myReports.length)
+        setRecentReports(myReports)
+        
+        // Calculate stats
+        const totalStats = myReports.reduce((acc, report) => ({
+          totalDoctors: acc.totalDoctors + calculateTotalDoctors(report),
+          totalPharmacies: acc.totalPharmacies + (report.pharmacies || 0) + (report.dispensaries || 0),
+          totalOrders: acc.totalOrders + (report.orders_count || 0),
+          totalValue: acc.totalValue + (report.orders_value || 0),
+          totalReports: acc.totalReports + 1
+        }), {
+          totalDoctors: 0,
+          totalPharmacies: 0,
+          totalOrders: 0,
+          totalValue: 0,
+          totalReports: 0
+        })
+        
+        setStats(totalStats)
+      }
+    } catch (fallbackError) {
+      console.error('❌ Fallback also failed:', fallbackError)
+      // Use empty data
+      setRecentReports([])
+      setStats({
+        totalDoctors: 0,
+        totalPharmacies: 0,
+        totalOrders: 0,
+        totalValue: 0,
+        totalReports: 0
+      })
     }
   }
 
@@ -111,28 +168,9 @@ const MedRepDashboard = () => {
     setLastRefresh(Date.now())
   }
 
-  // Check database directly
-  const checkDatabase = async () => {
-    try {
-      console.log('🔍 Checking database...')
-      const token = localStorage.getItem('token')
-      const response = await fetch('https://regal-pharma-backend.onrender.com/api/reports/my-reports?limit=50', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      const data = await response.json()
-      console.log('📊 Database check:', data)
-      alert(`Found ${data.data?.reports?.length || data.data?.length || 0} reports in database`)
-    } catch (error) {
-      console.error('Error checking database:', error)
-    }
-  }
-
-  // Debug: View raw report data
-  const viewRawData = () => {
-    console.log('📊 Raw reports data:', recentReports)
-    alert(`Total reports: ${recentReports.length}\nCheck console for details`)
+  // Handle logout
+  const handleLogout = () => {
+    logout()
   }
 
   if (loading && recentReports.length === 0) {
@@ -199,23 +237,6 @@ const MedRepDashboard = () => {
             }}
           >
             🔄 Refresh
-          </button>
-          <button
-            onClick={viewRawData}
-            style={{
-              background: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '50px',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            📊 View Data
           </button>
         </div>
 
@@ -307,7 +328,7 @@ const MedRepDashboard = () => {
             <ActionButton 
               icon="🚪" 
               text="Logout" 
-              onClick={logout}
+              onClick={handleLogout}
               color="#95a5a6"
             />
           </div>
@@ -330,23 +351,6 @@ const MedRepDashboard = () => {
             <h3 style={{ margin: '0', color: '#2c3e50', fontSize: '1.4em' }}>
               Recent Reports 📋
             </h3>
-            <button 
-              onClick={checkDatabase}
-              style={{
-                background: '#f8f9fa',
-                color: '#667eea',
-                border: '1px solid #e9ecef',
-                borderRadius: '20px',
-                padding: '8px 16px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              🔍 Check Database
-            </button>
           </div>
           
           {recentReports.length === 0 ? (
