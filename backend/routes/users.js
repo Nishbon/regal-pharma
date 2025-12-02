@@ -2,17 +2,6 @@ const express = require('express');
 const User = require('../models/User');
 const router = express.Router();
 
-// ====================== HELPER: Check Authentication ======================
-const requireAuth = (req, res, next) => {
-  if (!req.user || !req.user.isAuthenticated) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required. Please login first.'
-    });
-  }
-  next();
-};
-
 // ====================== HELPER: Check Supervisor Role ======================
 const requireSupervisor = (req, res, next) => {
   if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
@@ -25,7 +14,7 @@ const requireSupervisor = (req, res, next) => {
 };
 
 // ====================== GET ALL USERS (SUPERVISORS ONLY) ======================
-router.get('/', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/', requireSupervisor, async (req, res) => {
   try {
     console.log(`👥 Supervisor ${req.user.username} fetching all users`);
     
@@ -50,18 +39,16 @@ router.get('/', requireAuth, requireSupervisor, async (req, res) => {
     console.error('Get users error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching users',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching users'
     });
   }
 });
 
 // ====================== GET CURRENT USER PROFILE ======================
-router.get('/profile/me', requireAuth, async (req, res) => {
+router.get('/profile/me', async (req, res) => {
   try {
     console.log(`👤 User ${req.user.username} fetching profile`);
     
-    // Fetch fresh user data from database using REAL user ID
     const dbUser = await User.findById(req.user.id)
       .select('-password -__v')
       .lean();
@@ -82,14 +69,13 @@ router.get('/profile/me', requireAuth, async (req, res) => {
     console.error('Profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching profile'
     });
   }
 });
 
 // ====================== GET USER BY ID ======================
-router.get('/:id', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/:id', requireSupervisor, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .select('-password -__v')
@@ -110,14 +96,13 @@ router.get('/:id', requireAuth, requireSupervisor, async (req, res) => {
     console.error('Get user by ID error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching user',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching user'
     });
   }
 });
 
 // ====================== GET ACTIVE MEDREPS (SUPERVISORS ONLY) ======================
-router.get('/active-medreps', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/active-medreps', requireSupervisor, async (req, res) => {
   try {
     console.log(`👥 Supervisor ${req.user.username} fetching active medreps`);
     
@@ -141,14 +126,13 @@ router.get('/active-medreps', requireAuth, requireSupervisor, async (req, res) =
     console.error('Error fetching medreps:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching medreps',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching medreps'
     });
   }
 });
 
 // ====================== GET SUPERVISORS (SUPERVISORS ONLY) ======================
-router.get('/supervisors', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/supervisors', requireSupervisor, async (req, res) => {
   try {
     const supervisors = await User.find({ 
       role: { $in: ['supervisor', 'admin'] },
@@ -173,11 +157,10 @@ router.get('/supervisors', requireAuth, requireSupervisor, async (req, res) => {
 });
 
 // ====================== UPDATE USER PROFILE ======================
-router.put('/profile/me', requireAuth, async (req, res) => {
+router.put('/profile/me', async (req, res) => {
   try {
     const { name, email, region } = req.body;
     
-    // Only allow updating specific fields
     const updateData = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
@@ -205,18 +188,16 @@ router.put('/profile/me', requireAuth, async (req, res) => {
     console.error('Update profile error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error updating profile',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error updating profile'
     });
   }
 });
 
 // ====================== CREATE NEW USER (SUPERVISORS ONLY) ======================
-router.post('/', requireAuth, requireSupervisor, async (req, res) => {
+router.post('/', requireSupervisor, async (req, res) => {
   try {
     const { username, password, name, email, role, region } = req.body;
     
-    // Check if user already exists
     const existingUser = await User.findOne({ 
       $or: [
         { username: { $regex: new RegExp(`^${username}$`, 'i') } },
@@ -231,10 +212,9 @@ router.post('/', requireAuth, requireSupervisor, async (req, res) => {
       });
     }
     
-    // Create new user
     const newUser = new User({
       username,
-      password, // Will be hashed by pre-save middleware
+      password,
       name,
       email,
       role: role || 'medrep',
@@ -245,7 +225,6 @@ router.post('/', requireAuth, requireSupervisor, async (req, res) => {
     
     await newUser.save();
     
-    // Remove password from response
     const userResponse = newUser.toObject();
     delete userResponse.password;
     delete userResponse.__v;
@@ -261,18 +240,16 @@ router.post('/', requireAuth, requireSupervisor, async (req, res) => {
     console.error('Create user error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error creating user',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error creating user'
     });
   }
 });
 
 // ====================== UPDATE USER (SUPERVISORS ONLY) ======================
-router.put('/:id', requireAuth, requireSupervisor, async (req, res) => {
+router.put('/:id', requireSupervisor, async (req, res) => {
   try {
     const { name, email, role, region, is_active } = req.body;
     
-    // Don't allow updating username or password through this endpoint
     const updateData = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
@@ -308,7 +285,7 @@ router.put('/:id', requireAuth, requireSupervisor, async (req, res) => {
 });
 
 // ====================== DEACTIVATE USER (SUPERVISORS ONLY) ======================
-router.put('/:id/deactivate', requireAuth, requireSupervisor, async (req, res) => {
+router.put('/:id/deactivate', requireSupervisor, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     
@@ -319,7 +296,6 @@ router.put('/:id/deactivate', requireAuth, requireSupervisor, async (req, res) =
       });
     }
     
-    // Don't allow deactivating yourself
     if (user._id.toString() === req.user.id) {
       return res.status(400).json({
         success: false,
@@ -344,7 +320,7 @@ router.put('/:id/deactivate', requireAuth, requireSupervisor, async (req, res) =
 });
 
 // ====================== ACTIVATE USER (SUPERVISORS ONLY) ======================
-router.put('/:id/activate', requireAuth, requireSupervisor, async (req, res) => {
+router.put('/:id/activate', requireSupervisor, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -371,16 +347,6 @@ router.put('/:id/activate', requireAuth, requireSupervisor, async (req, res) => 
       message: 'Error activating user'
     });
   }
-});
-
-// ====================== TEST ENDPOINT ======================
-router.get('/test/auth', requireAuth, (req, res) => {
-  res.json({
-    success: true,
-    message: 'Users API is working',
-    authentication: 'Authenticated',
-    user: req.user
-  });
 });
 
 module.exports = router;
