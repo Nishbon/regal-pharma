@@ -3,17 +3,6 @@ const DailyReport = require('../models/DailyReport');
 const User = require('../models/User');
 const router = express.Router();
 
-// ====================== HELPER: Check Authentication ======================
-const requireAuth = (req, res, next) => {
-  if (!req.user || !req.user.isAuthenticated) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required. Please login first.'
-    });
-  }
-  next();
-};
-
 // ====================== HELPER: Check Supervisor Role ======================
 const requireSupervisor = (req, res, next) => {
   if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
@@ -26,18 +15,17 @@ const requireSupervisor = (req, res, next) => {
 };
 
 // ====================== GET WEEKLY STATS FOR USER ======================
-router.get('/weekly', requireAuth, async (req, res) => {
+router.get('/weekly', async (req, res) => {
   try {
     console.log(`📊 Weekly stats requested by user ID: ${req.user.id}`);
     
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     
-    // Use REAL user ID from JWT token
     const weeklyStats = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id, // Use the real user ID
+          user_id: req.user.id,
           report_date: { $gte: oneWeekAgo }
         }
       },
@@ -87,21 +75,20 @@ router.get('/weekly', requireAuth, async (req, res) => {
     console.error('Weekly stats error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching weekly stats',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching weekly stats'
     });
   }
 });
 
 // ====================== GET MONTHLY STATS FOR USER ======================
-router.get('/monthly', requireAuth, async (req, res) => {
+router.get('/monthly', async (req, res) => {
   try {
     console.log(`📈 Monthly stats requested by user ID: ${req.user.id}`);
     
     const monthlyStats = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id // Use the real user ID
+          user_id: req.user.id
         }
       },
       {
@@ -164,20 +151,18 @@ router.get('/monthly', requireAuth, async (req, res) => {
     console.error('Monthly stats error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching monthly stats',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching monthly stats'
     });
   }
 });
 
 // ====================== SUPERVISOR ANALYTICS - TEAM PERFORMANCE ======================
-router.get('/team-performance', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/team-performance', requireSupervisor, async (req, res) => {
   try {
     console.log(`👥 Team performance requested by supervisor: ${req.user.username}`);
     
     const { period = 'month' } = req.query;
     
-    // Calculate date range based on period
     let startDate = new Date();
     if (period === 'week') {
       startDate.setDate(startDate.getDate() - 7);
@@ -186,12 +171,11 @@ router.get('/team-performance', requireAuth, requireSupervisor, async (req, res)
     } else if (period === 'quarter') {
       startDate.setDate(startDate.getDate() - 90);
     } else {
-      startDate = null; // All time
+      startDate = null;
     }
     
     const dateFilter = startDate ? { report_date: { $gte: startDate } } : {};
     
-    // Fetch team performance from MongoDB
     const teamPerformance = await User.aggregate([
       {
         $match: {
@@ -240,31 +224,7 @@ router.get('/team-performance', requireAuth, requireSupervisor, async (req, res)
           total_pharmacies: { $sum: '$reports.pharmacies' },
           total_dispensaries: { $sum: '$reports.dispensaries' },
           total_orders: { $sum: '$reports.orders_count' },
-          total_value: { $sum: '$reports.orders_value' },
-          avg_daily_doctors: {
-            $cond: [
-              { $gt: ['$reports_count', 0] },
-              { $divide: [
-                {
-                  $sum: {
-                    $map: {
-                      input: '$reports',
-                      as: 'report',
-                      in: {
-                        $add: [
-                          '$$report.dentists', '$$report.physiotherapists', '$$report.gynecologists',
-                          '$$report.internists', '$$report.general_practitioners', 
-                          '$$report.pediatricians', '$$report.dermatologists'
-                        ]
-                      }
-                    }
-                  }
-                },
-                '$reports_count'
-              ]},
-              0
-            ]
-          }
+          total_value: { $sum: '$reports.orders_value' }
         }
       },
       { $sort: { total_value: -1 } }
@@ -275,30 +235,21 @@ router.get('/team-performance', requireAuth, requireSupervisor, async (req, res)
     res.json({
       success: true,
       data: teamPerformance,
-      requested_by: {
-        id: req.user.id,
-        username: req.user.username,
-        role: req.user.role
-      },
+      requested_by: req.user.username,
       count: teamPerformance.length,
-      period: period,
-      date_range: startDate ? {
-        start: startDate.toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-      } : 'all_time'
+      period: period
     });
   } catch (error) {
     console.error('Team performance error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching team performance',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching team performance'
     });
   }
 });
 
 // ====================== REGION-WISE ANALYTICS ======================
-router.get('/region-performance', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/region-performance', requireSupervisor, async (req, res) => {
   try {
     console.log(`🗺️ Region performance requested by: ${req.user.username}`);
     
@@ -337,15 +288,13 @@ router.get('/region-performance', requireAuth, requireSupervisor, async (req, re
           total_pharmacies: { $sum: '$pharmacies' },
           total_dispensaries: { $sum: '$dispensaries' },
           total_orders: { $sum: '$orders_count' },
-          total_value: { $sum: '$orders_value' },
-          report_count: { $sum: 1 }
+          total_value: { $sum: '$orders_value' }
         }
       },
       {
         $project: {
           region: '$_id',
           active_reps: { $size: '$active_reps' },
-          report_count: 1,
           total_doctors: 1,
           total_pharmacies: 1,
           total_dispensaries: 1,
@@ -369,25 +318,23 @@ router.get('/region-performance', requireAuth, requireSupervisor, async (req, re
     console.error('Region performance error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching region performance',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching region performance'
     });
   }
 });
 
 // ====================== DASHBOARD SUMMARY STATS ======================
-router.get('/dashboard-summary', requireAuth, async (req, res) => {
+router.get('/dashboard-summary', async (req, res) => {
   try {
     console.log(`📊 Dashboard summary requested by: ${req.user.username} (${req.user.role})`);
     
     const today = new Date();
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const startOfWeek = new Date(today.setDate(today.getDate() - 7));
-    const startOfMonth = new Date(today.setDate(today.getDate() - 30));
     
     // User's today stats
     const todayStats = await DailyReport.findOne({
-      user_id: req.user.id, // Use real user ID
+      user_id: req.user.id,
       report_date: { $gte: startOfDay }
     });
     
@@ -395,7 +342,7 @@ router.get('/dashboard-summary', requireAuth, async (req, res) => {
     const weeklyAgg = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id, // Use real user ID
+          user_id: req.user.id,
           report_date: { $gte: startOfWeek }
         }
       },
@@ -496,28 +443,9 @@ router.get('/dashboard-summary', requireAuth, async (req, res) => {
     console.error('Dashboard summary error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Error fetching dashboard summary',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching dashboard summary'
     });
   }
-});
-
-// ====================== TEST ENDPOINT ======================
-router.get('/test', async (req, res) => {
-  const userCount = await User.countDocuments();
-  const reportCount = await DailyReport.countDocuments();
-  
-  res.json({
-    success: true,
-    message: 'Analytics API is working',
-    authentication: req.user ? 'Authenticated' : 'Not authenticated',
-    user: req.user,
-    database_stats: {
-      users: userCount,
-      reports: reportCount
-    },
-    timestamp: new Date().toISOString()
-  });
 });
 
 module.exports = router;
