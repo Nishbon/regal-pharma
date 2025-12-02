@@ -3,17 +3,6 @@ const DailyReport = require('../models/DailyReport');
 const User = require('../models/User');
 const router = express.Router();
 
-// ====================== HELPER: Check Authentication ======================
-const requireAuth = (req, res, next) => {
-  if (!req.user || !req.user.isAuthenticated) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required. Please login first.'
-    });
-  }
-  next();
-};
-
 // ====================== HELPER: Check Supervisor Role ======================
 const requireSupervisor = (req, res, next) => {
   if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
@@ -26,7 +15,7 @@ const requireSupervisor = (req, res, next) => {
 };
 
 // ====================== GET USER'S OWN REPORTS ======================
-router.get('/my-reports', requireAuth, async (req, res) => {
+router.get('/my-reports', async (req, res) => {
   try {
     console.log(`📋 Fetching reports for user ID: ${req.user.id}`);
     
@@ -52,14 +41,13 @@ router.get('/my-reports', requireAuth, async (req, res) => {
     console.error('Error fetching user reports:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching reports',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching reports'
     });
   }
 });
 
 // ====================== GET ALL REPORTS (SUPERVISORS ONLY) ======================
-router.get('/all', requireAuth, requireSupervisor, async (req, res) => {
+router.get('/all', requireSupervisor, async (req, res) => {
   try {
     console.log(`👨‍💼 Supervisor ${req.user.username} fetching all reports`);
     
@@ -81,14 +69,13 @@ router.get('/all', requireAuth, requireSupervisor, async (req, res) => {
     console.error('Error fetching all reports:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching reports',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error fetching reports'
     });
   }
 });
 
 // ====================== CREATE NEW REPORT ======================
-router.post('/create', requireAuth, async (req, res) => {
+router.post('/create', async (req, res) => {
   try {
     const { date, doctor_name, hospital_name, products_promoted, samples_given, 
             next_visit_date, challenges_faced, additional_notes } = req.body;
@@ -142,14 +129,13 @@ router.post('/create', requireAuth, async (req, res) => {
     console.error('Error creating report:', error);
     res.status(500).json({
       success: false,
-      message: 'Error submitting report',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Error submitting report'
     });
   }
 });
 
 // ====================== GET REPORT BY ID ======================
-router.get('/:id', requireAuth, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const report = await DailyReport.findById(req.params.id).lean();
     
@@ -183,7 +169,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 });
 
 // ====================== UPDATE REPORT ======================
-router.put('/:id', requireAuth, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const report = await DailyReport.findById(req.params.id);
     
@@ -222,7 +208,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 });
 
 // ====================== DELETE REPORT ======================
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const report = await DailyReport.findById(req.params.id);
     
@@ -258,7 +244,7 @@ router.delete('/:id', requireAuth, async (req, res) => {
 });
 
 // ====================== GET REPORTS BY DATE RANGE ======================
-router.get('/date-range/:start/:end', requireAuth, async (req, res) => {
+router.get('/date-range/:start/:end', async (req, res) => {
   try {
     const startDate = new Date(req.params.start);
     const endDate = new Date(req.params.end);
@@ -297,16 +283,6 @@ router.get('/date-range/:start/:end', requireAuth, async (req, res) => {
       message: 'Error fetching reports'
     });
   }
-});
-
-// ====================== TEST ENDPOINT ======================
-router.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Reports API is working',
-    authentication: req.user ? 'Authenticated' : 'Not authenticated',
-    user: req.user
-  });
 });
 
 module.exports = router;
