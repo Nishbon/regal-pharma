@@ -4,11 +4,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
-const jwt = require('jsonwebtoken');
 
 // MongoDB connection
 const connectDB = require('./config/database');
-const User = require('./models/User');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -39,7 +37,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// CORS configuration - ALLOW ALL FOR NOW (fix later)
+// CORS configuration
 app.use(cors({
   origin: '*', // Allow all for testing
   credentials: true,
@@ -89,9 +87,12 @@ app.get('/api/test', (req, res) => {
     message: 'API is working!',
     endpoints: [
       'POST /api/auth/login',
-      'GET  /api/reports/my-reports',
-      'GET  /api/analytics/weekly',
-      'GET  /api/users (supervisors only)'
+      'POST /api/auth/register',
+      'POST /api/auth/logout',
+      'GET  /api/test-auth (requires token)',
+      'GET  /api/reports/* (requires token)',
+      'GET  /api/analytics/* (requires token)',
+      'GET  /api/users/* (requires token)'
     ],
     timestamp: new Date().toISOString()
   });
@@ -102,11 +103,6 @@ app.use('/api/auth', authRoutes);
 
 // ====================== PROTECTED ROUTES (REQUIRE AUTH) ======================
 console.log('\nLOADING PROTECTED ROUTES...');
-
-// Apply auth middleware to all routes below this line
-app.use('/api/reports', authenticateToken, reportRoutes);
-app.use('/api/analytics', authenticateToken, analyticsRoutes);
-app.use('/api/users', authenticateToken, userRoutes);
 
 // Test auth endpoint
 app.get('/api/test-auth', authenticateToken, (req, res) => {
@@ -122,29 +118,36 @@ app.get('/api/test-auth', authenticateToken, (req, res) => {
   });
 });
 
+// Apply auth middleware to protected routes
+app.use('/api/reports', authenticateToken, reportRoutes);
+app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/users', authenticateToken, userRoutes);
+
 console.log('✅ All routes loaded successfully\n');
 
 // ====================== ERROR HANDLING ======================
 // 404 handler
 app.use('*', (req, res) => {
+  const availableEndpoints = [
+    'GET  /',
+    'GET  /health',
+    'GET  /api/health',
+    'GET  /api/test',
+    'POST /api/auth/login',
+    'POST /api/auth/register',
+    'POST /api/auth/logout',
+    'GET  /api/test-auth (requires token)',
+    'GET  /api/reports/* (requires token)',
+    'GET  /api/analytics/* (requires token)',
+    'GET  /api/users/* (requires token)'
+  ];
+  
   res.status(404).json({ 
     success: false, 
     message: 'Route not found',
     requestedUrl: req.originalUrl,
     method: req.method,
-    availableEndpoints: [
-      'GET  /',
-      'GET  /health',
-      'GET  /api/health',
-      'GET  /api/test',
-      'POST /api/auth/login',
-      'POST /api/auth/register',
-      'POST /api/auth/logout',
-      'GET  /api/test-auth (requires token)',
-      'GET  /api/reports/* (requires token)',
-      'GET  /api/analytics/* (requires token)',
-      'GET  /api/users/* (requires token)'
-    ]
+    availableEndpoints: availableEndpoints.filter(ep => !ep.includes('(requires token)'))
   });
 });
 
