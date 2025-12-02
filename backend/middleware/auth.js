@@ -1,6 +1,5 @@
-// backend/middleware/auth.js - MONGODB VERSION
 const jwt = require('jsonwebtoken');
-const User = require('../models/User'); // MongoDB User model
+const User = require('../models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'medical-reporting-system-secret-key-2023';
 
@@ -24,9 +23,19 @@ const authenticateToken = (req, res, next) => {
     }
 
     try {
+      // Look for _id in decoded token, not id
+      const userId = decoded._id || decoded.id; // Try both for compatibility
+      
+      if (!userId) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Invalid token format' 
+        });
+      }
+
       // Verify user still exists and is active in MongoDB
       const user = await User.findOne({ 
-        _id: decoded.id, 
+        _id: userId,  // ← Using userId which could be _id or id
         is_active: true 
       }).select('-password');
 
