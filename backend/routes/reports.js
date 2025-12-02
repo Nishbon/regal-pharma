@@ -19,22 +19,39 @@ router.get('/my-reports', async (req, res) => {
   try {
     console.log(`📋 Fetching reports for user ID: ${req.user.id}`);
     
+    // Get query parameters for pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
     // Use REAL user ID from JWT token
-    const reports = await DailyReport.find({ user_id: req.user.id })
-      .sort({ report_date: -1 })
-      .limit(20)
-      .lean();
+    const [reports, total] = await Promise.all([
+      DailyReport.find({ user_id: req.user.id })
+        .sort({ report_date: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      DailyReport.countDocuments({ user_id: req.user.id })
+    ]);
     
     console.log(`✅ Found ${reports.length} reports for user ${req.user.username}`);
     
     res.json({
       success: true,
-      data: reports,
-      count: reports.length,
+      data: {
+        reports: reports,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      },
       user: {
         id: req.user.id,
         username: req.user.username,
-        name: req.user.name
+        name: req.user.name,
+        region: req.user.region
       }
     });
   } catch (error) {
