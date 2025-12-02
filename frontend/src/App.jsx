@@ -103,6 +103,24 @@ const SupervisorDashboardRoute = () => {
 };
 
 function App() {
+  const { user, loading } = useAuth(); // Get auth state
+
+  // Add useEffect to handle post-login redirect
+  useEffect(() => {
+    if (user && !loading) {
+      // Check if we have a stored redirect path from login
+      const redirectPath = sessionStorage.getItem('postLoginRedirect');
+      
+      if (redirectPath) {
+        console.log('🔄 Found post-login redirect path:', redirectPath);
+        // Clear the stored path
+        sessionStorage.removeItem('postLoginRedirect');
+        // Navigate to the intended destination
+        window.location.href = redirectPath;
+      }
+    }
+  }, [user, loading]);
+
   return (
     <Router>
       <AuthProvider>
