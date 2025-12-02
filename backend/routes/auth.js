@@ -5,13 +5,16 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'medical-reporting-system-secret-key-2023';
 
-// Login
+// ====================== LOGIN ENDPOINT ======================
 router.post('/login', [
   body('username').trim().notEmpty().withMessage('Username is required'),
   body('password').notEmpty().withMessage('Password is required')
 ], async (req, res) => {
   try {
+    console.log('🔐 Login attempt for:', req.body.username);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ 
@@ -23,32 +26,32 @@ router.post('/login', [
 
     const { username, password } = req.body;
 
-    // Find user in MongoDB (case-insensitive search)
+    // Find user (case-insensitive)
     const user = await User.findOne({ 
       username: { $regex: new RegExp(`^${username}$`, 'i') }, 
       is_active: true 
     });
     
     if (!user) {
-      console.log(`❌ Login failed: User "${username}" not found`);
+      console.log(`❌ User not found: ${username}`);
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid credentials' 
+        message: 'Invalid username or password' 
       });
     }
 
-    // Compare password using bcrypt
+    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     
     if (!isMatch) {
-      console.log(`❌ Login failed: Incorrect password for "${username}"`);
+      console.log(`❌ Wrong password for: ${username}`);
       return res.status(401).json({ 
         success: false, 
-        message: 'Invalid credentials' 
+        message: 'Invalid username or password' 
       });
     }
 
-    // Create JWT token with more user info
+    // Create JWT token
     const token = jwt.sign(
       { 
         id: user._id.toString(),
@@ -58,7 +61,7 @@ router.post('/login', [
         email: user.email,
         region: user.region
       }, 
-      process.env.JWT_SECRET, // Use from environment variable
+      JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -81,7 +84,7 @@ router.post('/login', [
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Server error during login',
@@ -90,7 +93,15 @@ router.post('/login', [
   }
 });
 
-// Register new user (supervisor/admin only)
+// ====================== LOGOUT ENDPOINT ======================
+router.post('/logout', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Logout successful' 
+  });
+});
+
+// ====================== REGISTER ENDPOINT ======================
 router.post('/register', [
   body('username').trim().notEmpty().withMessage('Username is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
@@ -100,9 +111,16 @@ router.post('/register', [
   body('region').optional().trim()
 ], async (req, res) => {
   try {
-    // Check if requester is supervisor/admin (from auth middleware)
-    if (!req.user || !req.user.isAuthenticated || 
-        (req.user.role !== 'supervisor' && req.user.role !== 'admin')) {
+    // Check authentication
+    if (!req.user || !req.user.isAuthenticated) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Check if user is supervisor/admin
+    if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Only supervisors/admins can register new users'
@@ -148,7 +166,7 @@ router.post('/register', [
       role,
       region: region || 'General',
       is_active: true,
-      createdBy: req.user.id // Track who created this user
+      createdBy: req.user.id
     });
 
     await newUser.save();
@@ -180,7 +198,7 @@ router.post('/register', [
   }
 });
 
-// Get current user profile
+// ====================== PROFILE ENDPOINT ======================
 router.get('/profile', async (req, res) => {
   try {
     if (!req.user || !req.user.isAuthenticated) {
@@ -190,8 +208,8 @@ router.get('/profile', async (req, res) => {
       });
     }
 
-    // Fetch fresh user data from database
-    const user = await User.findById(req.user.id).select('-password');
+    // Fetch fresh user data
+    const user = await User.findById(req.user.id).select('-password -__v');
     
     if (!user) {
       return res.status(404).json({
@@ -213,11 +231,17 @@ router.get('/profile', async (req, res) => {
   }
 });
 
-// Logout (client-side token removal)
-router.post('/logout', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Logout successful' 
+// ====================== TEST ENDPOINT ======================
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Auth API is working',
+    endpoints: [
+      'POST /login',
+      'POST /logout',
+      'POST /register (supervisors only)',
+      'GET  /profile'
+    ]
   });
 });
 
