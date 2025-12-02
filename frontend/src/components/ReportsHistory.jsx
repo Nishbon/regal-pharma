@@ -23,44 +23,101 @@ const ReportsHistory = () => {
       setError('')
       console.log('📋 Loading reports page:', currentPage)
       
+      // Use the updated API with pagination
       const response = await reportsAPI.getMyReports(currentPage, reportsPerPage)
-      console.log('📊 Reports API response:', response.data)
+      console.log('📊 Full API response:', response)
       
       if (response.data.success) {
-        // Handle different response structures
+        // NEW: Better handling of API response structure
         let reportsData = []
-        let paginationData = {}
         let totalCount = 0
+        let pages = 1
         
-        if (response.data.data?.reports) {
-          // Structure: { data: { reports: [], pagination: {} } }
+        // Check for different response structures
+        if (response.data.data?.reports && Array.isArray(response.data.data.reports)) {
+          // Structure 1: { data: { reports: [], pagination: {} } }
           reportsData = response.data.data.reports
-          paginationData = response.data.data.pagination || {}
-          totalCount = paginationData.total || reportsData.length
+          totalCount = response.data.data.pagination?.total || reportsData.length
+          pages = response.data.data.pagination?.pages || Math.ceil(totalCount / reportsPerPage)
         } else if (Array.isArray(response.data.data)) {
-          // Structure: { data: [] }
+          // Structure 2: { data: [] }
           reportsData = response.data.data
-          totalCount = response.data.data.length
-        } else if (response.data.data?.data) {
-          // Structure: { data: { data: [] } }
+          totalCount = reportsData.length
+          pages = 1
+        } else if (response.data.data?.data && Array.isArray(response.data.data.data)) {
+          // Structure 3: { data: { data: [], total: X, pages: Y } }
           reportsData = response.data.data.data
           totalCount = response.data.data.total || reportsData.length
+          pages = response.data.data.pages || Math.ceil(totalCount / reportsPerPage)
+        } else if (response.data.data && typeof response.data.data === 'object') {
+          // Structure 4: Single report object
+          reportsData = [response.data.data]
+          totalCount = 1
+          pages = 1
         }
         
         console.log('📋 Processed reports:', reportsData.length)
-        console.log('Sample report:', reportsData[0])
+        console.log('Pagination - total:', totalCount, 'pages:', pages)
         
         setReports(reportsData)
         setTotalReports(totalCount)
-        setTotalPages(paginationData.pages || Math.ceil(totalCount / reportsPerPage) || 1)
+        setTotalPages(pages)
       } else {
-        setError('Failed to load reports')
+        console.warn('API returned unsuccessful:', response.data)
+        setError(response.data.message || 'Failed to load reports')
       }
     } catch (error) {
       console.error('❌ Failed to load reports:', error)
-      setError(error.response?.data?.message || 'Failed to load reports')
+      console.error('Error response:', error.response?.data)
+      console.error('Error status:', error.response?.status)
+      
+      let errorMessage = 'Failed to load reports'
+      if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please login again.'
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Reports endpoint not found'
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+      
+      setError(errorMessage)
     }
     setLoading(false)
+  }
+
+  // Add fallback loading if API fails
+  const loadFallbackData = async () => {
+    try {
+      console.log('🔄 Trying fallback data loading...')
+      const allResponse = await reportsAPI.getAll()
+      
+      if (allResponse.data.success) {
+        const allReports = allResponse.data.data || []
+        console.log('📋 Total reports from getAll:', allReports.length)
+        
+        // Filter for current user
+        const userId = user?._id || user?.id
+        const myReports = allReports.filter(report => {
+          const reportUserId = report.user_id?._id || report.user_id || report.user
+          return reportUserId === userId
+        })
+        
+        // Paginate manually
+        const startIndex = (currentPage - 1) * reportsPerPage
+        const endIndex = startIndex + reportsPerPage
+        const paginatedReports = myReports.slice(startIndex, endIndex)
+        
+        console.log('👤 Filtered & paginated reports:', paginatedReports.length)
+        
+        setReports(paginatedReports)
+        setTotalReports(myReports.length)
+        setTotalPages(Math.ceil(myReports.length / reportsPerPage))
+        setError('') // Clear any previous errors
+      }
+    } catch (fallbackError) {
+      console.error('❌ Fallback also failed:', fallbackError)
+      setError('Could not load reports. Please try again later.')
+    }
   }
 
   const calculateTotalDoctors = (report) => {
@@ -112,6 +169,11 @@ const ReportsHistory = () => {
     loadReports()
   }
 
+  const retryWithFallback = () => {
+    setError('')
+    loadFallbackData()
+  }
+
   if (loading && reports.length === 0) {
     return (
       <div style={{ 
@@ -155,32 +217,37 @@ const ReportsHistory = () => {
         boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
         position: 'relative'
       }}>
-        <button
-          onClick={refreshReports}
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            background: 'rgba(255,255,255,0.2)',
-            color: 'white',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: '50px',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          🔄 Refresh
-        </button>
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          display: 'flex',
+          gap: '10px'
+        }}>
+          <button
+            onClick={refreshReports}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '50px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            🔄 Refresh
+          </button>
+        </div>
 
         <h1 style={{ margin: '0 0 10px 0', fontSize: '2.2em', fontWeight: '300' }}>
           My Reports History 📊
         </h1>
         <p style={{ margin: '0', fontSize: '1.1em', opacity: '0.9' }}>
-          {reports.length > 0 ? `${stats.totalReports} reports • ${user?.region || 'All Regions'}` : 'No reports yet'}
+          {reports.length > 0 ? `${totalReports} total reports • ${user?.region || 'All Regions'}` : 'No reports yet'}
         </p>
       </div>
 
@@ -194,22 +261,44 @@ const ReportsHistory = () => {
           marginBottom: '20px',
           border: '1px solid #f5c6cb'
         }}>
-          ⚠️ {error}
-          <button 
-            onClick={refreshReports}
-            style={{
-              marginLeft: '15px',
-              background: '#721c24',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '5px 10px',
-              fontSize: '12px',
-              cursor: 'pointer'
-            }}
-          >
-            Retry
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ fontSize: '1.2em' }}>⚠️</div>
+            <div style={{ flex: 1 }}>
+              <strong>Error:</strong> {error}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+            <button 
+              onClick={refreshReports}
+              style={{
+                padding: '6px 12px',
+                background: '#721c24',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              Retry
+            </button>
+            <button 
+              onClick={retryWithFallback}
+              style={{
+                padding: '6px 12px',
+                background: '#856404',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              Try Alternative Method
+            </button>
+          </div>
         </div>
       )}
 
@@ -263,16 +352,35 @@ const ReportsHistory = () => {
           marginBottom: '25px'
         }}>
           <h2 style={{ margin: '0', color: '#2c3e50', fontSize: '1.5em' }}>
-            All Reports ({reports.length} of {totalReports})
+            {reports.length === 0 ? 'All Reports' : `Showing ${reports.length} ${reports.length === 1 ? 'report' : 'reports'}`}
+            {totalReports > reports.length && ` (${totalReports} total)`}
           </h2>
           <div style={{ 
             fontSize: '0.9em', 
             color: '#7f8c8d',
             background: '#f8f9fa',
             padding: '5px 15px',
-            borderRadius: '20px'
+            borderRadius: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
           }}>
-            Page {currentPage} of {totalPages}
+            <span>Page {currentPage} of {totalPages}</span>
+            {totalReports > 0 && (
+              <span style={{ 
+                background: '#667eea',
+                color: 'white',
+                borderRadius: '50%',
+                width: '20px',
+                height: '20px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.8em'
+              }}>
+                {totalReports}
+              </span>
+            )}
           </div>
         </div>
 
@@ -285,7 +393,7 @@ const ReportsHistory = () => {
             <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>📝</div>
             <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Reports Found</h3>
             <p style={{ margin: '0 0 25px 0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
-              You haven't submitted any daily reports yet. Start tracking your activities by submitting your first report!
+              {error ? 'There was an error loading your reports.' : 'You haven\'t submitted any daily reports yet.'}
             </p>
             <button 
               onClick={() => window.location.href = '/daily-report'}
@@ -299,11 +407,28 @@ const ReportsHistory = () => {
                 fontSize: '1em',
                 fontWeight: '600',
                 cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+                marginBottom: '15px'
               }}
             >
               Submit Your First Report
             </button>
+            <div style={{ fontSize: '0.9em', color: '#6c757d' }}>
+              Or try <button 
+                onClick={retryWithFallback}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#667eea',
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                  padding: '0 4px',
+                  fontSize: '1em'
+                }}
+              >
+                alternative loading method
+              </button>
+            </div>
           </div>
         ) : (
           <>
@@ -399,7 +524,6 @@ const ReportsHistory = () => {
                       index={index}
                       onViewDetails={viewReportDetails}
                       calculateTotalDoctors={calculateTotalDoctors}
-                      calculateTotalVisits={calculateTotalVisits}
                     />
                   ))}
                 </tbody>
@@ -518,47 +642,15 @@ const ReportsHistory = () => {
           report={selectedReport} 
           onClose={closeReportDetails}
           calculateTotalDoctors={calculateTotalDoctors}
-          calculateTotalVisits={calculateTotalVisits}
         />
-      )}
-
-      {/* Debug Info */}
-      {process.env.NODE_ENV === 'development' && reports.length > 0 && (
-        <div style={{
-          background: '#f8f9fa',
-          padding: '15px 20px',
-          borderRadius: '10px',
-          fontSize: '0.85em',
-          color: '#7f8c8d',
-          marginTop: '20px',
-          border: '1px solid #e9ecef'
-        }}>
-          <strong>ℹ️ Debug Info:</strong> Showing {reports.length} reports. First report ID: {reports[0]?._id || reports[0]?.id || 'N/A'}
-          <button 
-            onClick={() => console.log('All reports:', reports)}
-            style={{
-              marginLeft: '15px',
-              background: '#6c757d',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '3px 8px',
-              fontSize: '11px',
-              cursor: 'pointer'
-            }}
-          >
-            Log Data
-          </button>
-        </div>
       )}
     </div>
   )
 }
 
-// Report Row Component
-const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors, calculateTotalVisits }) => {
+// Report Row Component (simplified)
+const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors }) => {
   const totalDoctors = calculateTotalDoctors(report)
-  const totalVisits = calculateTotalVisits(report)
   
   const formatDate = (dateString) => {
     try {
@@ -672,10 +764,10 @@ const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors, calcul
   )
 }
 
-// Report Details Modal Component (Updated)
-const ReportDetails = ({ report, onClose, calculateTotalDoctors, calculateTotalVisits }) => {
+// Report Details Modal Component (keep as is)
+const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
   const totalDoctors = calculateTotalDoctors(report)
-  const totalVisits = calculateTotalVisits(report)
+  const totalVisits = totalDoctors + (report.pharmacies || 0) + (report.dispensaries || 0)
   
   const formatDate = (dateString) => {
     try {
@@ -827,7 +919,7 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors, calculateTotalV
   )
 }
 
-// Reusable Components
+// Reusable Components (keep as is)
 const DetailSection = ({ title, children }) => (
   <div>
     <h3 style={{ 
