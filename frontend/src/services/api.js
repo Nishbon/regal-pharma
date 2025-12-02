@@ -63,11 +63,15 @@ export const authAPI = {
 };
 
 export const reportsAPI = {
-  getMyReports: () => 
-    api.get('/reports/my-reports'),
+  // For MedRepDashboard - with pagination support
+  getMyReports: (page = 1, limit = 10) => 
+    api.get('/reports/my-reports', {
+      params: { page, limit }
+    }),
   
+  // For SupervisorDashboard - get all reports
   getAll: () => 
-    api.get('/reports/all'),
+    api.get('/reports'),  // Changed from '/reports/all'
   
   create: (data) => 
     api.post('/reports/create', data),
@@ -102,7 +106,6 @@ export const analyticsAPI = {
     api.get('/analytics/dashboard-summary')
 };
 
-// ADD THIS - Missing export that's causing the build error
 export const usersAPI = {
   getAll: () => 
     api.get('/users'),
