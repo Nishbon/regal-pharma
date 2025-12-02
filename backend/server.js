@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+const jwt = require('jsonwebtoken');
 
 // MongoDB connection
 const connectDB = require('./config/database');
@@ -37,6 +38,7 @@ if (process.env.NODE_ENV === 'development') {
 // CORS configuration
 const allowedOrigins = [
   'https://regal-pharma-frontend.onrender.com',
+  'https://medical-reporting-frontend.onrender.com',
   'http://localhost:5173',
   'http://localhost:3000',
 ];
@@ -66,44 +68,45 @@ app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ====================== GLOBAL AUTH BYPASS ======================
-// This middleware runs before ALL routes and sets req.user
+// ====================== REAL AUTHENTICATION MIDDLEWARE ======================
 app.use((req, res, next) => {
   console.log(`📥 ${req.method} ${req.path}`);
   
-  // Extract user info from token
-  const authHeader = req.headers.authorization;
-  let username = 'guest';
-  let userId = null;
-  let userRole = 'medrep';
-  
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.replace('Bearer ', '');
-    
-    // Parse debug token
-    if (token.includes('debug-token-')) {
-      const parts = token.split('-');
-      if (parts.length >= 4) {
-        username = parts[3];
-        userRole = (username === 'admin') ? 'supervisor' : 'medrep';
-        console.log(`🔑 Debug token detected: ${username} (${userRole})`);
-      }
-    }
+  // Skip auth for public routes
+  const publicRoutes = ['/api/auth/login', '/api/auth/register', '/', '/health', '/api/health'];
+  if (publicRoutes.includes(req.path)) {
+    return next();
   }
   
-  // Set user on request object
-  req.user = {
-    id: `temp-${Date.now()}`,
-    username: username,
-    role: userRole,
-    name: username === 'admin' ? 'Admin User' : 
-          username === 'bonte' ? 'Bonte' : 
-          username === 'john' ? 'John Doe' : 'Guest User',
-    isAuthenticated: true,
-    isDebug: true
-  };
+  // Extract token from header
+  const authHeader = req.headers.authorization;
   
-  console.log(`👤 User set: ${req.user.username} (${req.user.role})`);
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('❌ No auth token provided');
+    req.user = { isAuthenticated: false };
+    return next();
+  }
+  
+  const token = authHeader.replace('Bearer ', '');
+  
+  try {
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = {
+      id: decoded.id,
+      username: decoded.username,
+      role: decoded.role,
+      name: decoded.name,
+      email: decoded.email,
+      region: decoded.region,
+      isAuthenticated: true
+    };
+    console.log(`✅ Authenticated user: ${req.user.username} (${req.user.role})`);
+  } catch (error) {
+    console.log('❌ Invalid token:', error.message);
+    req.user = { isAuthenticated: false };
+  }
+  
   next();
 });
 
@@ -113,7 +116,7 @@ console.log('\nLOADING ROUTES...');
 // Public routes
 app.use('/api/auth', authRoutes);
 
-// Protected routes (auth bypassed globally above)
+// Protected routes (require authentication)
 app.use('/api/reports', reportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/users', userRoutes);
@@ -129,8 +132,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
-    currentUser: req.user,
-    database: 'MongoDB connected - showing real data'
+    status: 'Running with REAL authentication'
   });
 });
 
@@ -140,77 +142,42 @@ app.get('/health', (req, res) => {
     success: true, 
     message: 'Server is healthy',
     database: 'Connected to MongoDB',
-    user: req.user
+    authentication: 'JWT-based (no debug bypass)'
   });
 });
 
 app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
-    message: 'API Server is running', 
-    user: req.user
+    message: 'API Server is running',
+    authentication: req.user?.isAuthenticated ? 'Authenticated' : 'Not authenticated'
   });
 });
 
-// Debug login endpoint
-app.post('/api/debug-login', (req, res) => {
-  const { username, password } = req.body;
-  
-  console.log('Debug login:', username);
-  
-  const testUsers = {
-    'admin': { 
-      password: 'admin123', 
-      name: 'Admin User', 
-      role: 'supervisor',
-      email: 'admin@regalpharma.com',
-      region: 'HQ'
-    },
-    'bonte': { 
-      password: 'bonte123', 
-      name: 'Bonte', 
-      role: 'medrep',
-      email: 'bonte@regalpharma.com',
-      region: 'North'
-    },
-    'john': { 
-      password: 'john123', 
-      name: 'John Doe', 
-      role: 'medrep',
-      email: 'john@regalpharma.com',
-      region: 'South'
-    }
-  };
-  
-  const user = testUsers[username];
-  
-  if (user && user.password === password) {
-    const token = `debug-token-${Date.now()}-${username}`;
-    
-    res.json({
-      success: true,
-      message: 'Login successful (debug route)',
-      data: {
-        token: token,
-        user: {
-          id: `user-${username}`,
-          username: username,
-          name: user.name,
-          role: user.role,
-          email: user.email,
-          region: user.region,
-          createdAt: new Date().toISOString()
-        }
-      }
-    });
-  } else {
-    res.status(401).json({
+// ====================== PROTECTED TEST ENDPOINT ======================
+app.get('/api/test-auth', (req, res) => {
+  if (!req.user || !req.user.isAuthenticated) {
+    return res.status(401).json({
       success: false,
-      message: 'Invalid credentials',
-      availableUsers: Object.keys(testUsers)
+      message: 'Authentication required. Please login first.'
     });
   }
+  
+  res.json({
+    success: true,
+    message: 'Authentication successful!',
+    user: {
+      id: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      name: req.user.name,
+      isAuthenticated: true
+    },
+    timestamp: new Date().toISOString()
+  });
 });
+
+// REMOVED: /api/debug-login endpoint (no more debug auth)
 
 // ====================== ERROR HANDLING ======================
 // 404 handler
@@ -254,13 +221,13 @@ app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+  console.log(`🔐 Authentication: JWT (REAL - no debug bypass)`);
   console.log(`📊 MongoDB: ${process.env.MONGODB_URI ? 'Connected' : 'Not configured'}`);
   console.log('='.repeat(50));
   console.log('\n📋 Available Endpoints:');
-  console.log('   POST /api/debug-login     - Test login');
-  console.log('   GET  /api/users           - Get all users (real MongoDB data)');
-  console.log('   GET  /api/reports         - Get reports (real MongoDB data)');
-  console.log('   GET  /api/analytics       - Get analytics (real MongoDB data)');
-  console.log('\n✅ Server ready! Authentication bypassed, using real MongoDB data.');
+  console.log('   POST /api/auth/login      - Real login with JWT');
+  console.log('   GET  /api/test-auth       - Test authentication');
+  console.log('   GET  /api/reports         - Get reports (requires auth)');
+  console.log('   GET  /api/users           - Get users (requires auth + supervisor role)');
+  console.log('\n✅ Server ready! Real authentication enabled.');
 });
