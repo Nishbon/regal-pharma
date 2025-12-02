@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { reportsAPI, usersAPI } from '../services/api'
+import { reportsAPI, usersAPI, analyticsAPI } from '../services/api' // Added analyticsAPI
 import { useAuth } from '../contexts/AuthContext'
 
 const SupervisorDashboard = () => {
@@ -20,7 +20,7 @@ const SupervisorDashboard = () => {
       setError('')
       console.log('👑 Loading supervisor dashboard data...')
       
-      // Get all users
+      // 1. Get all users
       const usersResponse = await usersAPI.getAll()
       console.log('👥 Users response:', usersResponse.data)
       
@@ -28,88 +28,114 @@ const SupervisorDashboard = () => {
         const usersData = usersResponse.data.data || []
         setAllUsers(usersData)
         
-        // Get reports for all medreps
-        const activeMedReps = usersData.filter(u => u.role === 'medrep' && u.is_active !== false)
-        console.log('🔄 Found active medreps:', activeMedReps.length)
+        // 2. Use the PROPER team performance endpoint
+        try {
+          const teamPerformanceResponse = await analyticsAPI.getTeamPerformance(timeRange)
+          console.log('📊 Team performance API response:', teamPerformanceResponse.data)
+          
+          if (teamPerformanceResponse.data.success) {
+            const teamData = teamPerformanceResponse.data.data || []
+            setTeamReports(teamData)
+          } else {
+            // Fallback: Calculate manually
+            await loadTeamDataManually(usersData)
+          }
+        } catch (analyticsError) {
+          console.log('Analytics API failed, using manual calculation:', analyticsError)
+          await loadTeamDataManually(usersData)
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error loading team data:', error)
+      setError(error.response?.data?.message || 'Failed to load team data')
+    }
+    setLoading(false)
+  }
+
+  // Fallback function if analytics API doesn't work
+  const loadTeamDataManually = async (usersData) => {
+    try {
+      // Get ALL reports (supervisors can access all)
+      const allReportsResponse = await reportsAPI.getAll()
+      console.log('📋 All reports response:', allReportsResponse.data)
+      
+      if (allReportsResponse.data.success) {
+        const allReports = allReportsResponse.data.data || []
+        console.log('📊 Total reports found:', allReports.length)
         
-        // For each medrep, get their reports and calculate performance
-        const teamPerformance = []
-        
-        // Get date range for filtering
+        // Calculate date range
         const now = new Date()
         const cutoffDate = new Date()
         
         if (timeRange === 'week') {
           cutoffDate.setDate(now.getDate() - 7)
         } else if (timeRange === 'month') {
-          cutoffDate.setMonth(now.getMonth() - 1)
+          cutoffDate.setDate(now.getDate() - 30)
         } else {
-          cutoffDate.setMonth(now.getMonth() - 3)
+          cutoffDate.setDate(now.getDate() - 90)
         }
         
-        // Get reports for each medrep (in a real app, you'd have a team reports endpoint)
-        // For now, we'll calculate from all reports
-        const allReportsResponse = await reportsAPI.getMyReports(1, 1000)
-        console.log('📊 All reports response:', allReportsResponse.data)
-        
-        if (allReportsResponse.data.success) {
-          let allReports = []
-          if (allReportsResponse.data.data?.reports) {
-            allReports = allReportsResponse.data.data.reports
-          } else if (Array.isArray(allReportsResponse.data.data)) {
-            allReports = allReportsResponse.data.data
+        // Filter reports by date
+        const filteredReports = allReports.filter(report => {
+          try {
+            const reportDate = new Date(report.report_date || report.createdAt)
+            return reportDate >= cutoffDate
+          } catch (e) {
+            return false
           }
-          
-          console.log('📋 Total reports found:', allReports.length)
-          
-          // Calculate team performance by grouping reports by user
-          const reportsByUser = {}
-          
-          allReports.forEach(report => {
-            try {
-              const reportDate = new Date(report.report_date || report.createdAt)
-              if (reportDate >= cutoffDate) {
-                const userId = report.user_id?._id || report.user_id
-                if (!reportsByUser[userId]) {
-                  reportsByUser[userId] = {
-                    user_id: userId,
-                    reports: [],
-                    total_doctors: 0,
-                    total_pharmacies: 0,
-                    total_dispensaries: 0,
-                    total_orders: 0,
-                    total_value: 0
-                  }
-                }
-                
-                reportsByUser[userId].reports.push(report)
-                
-                // Calculate totals for this report
-                const doctors = 
-                  (report.dentists || 0) +
-                  (report.physiotherapists || 0) +
-                  (report.gynecologists || 0) +
-                  (report.internists || 0) +
-                  (report.general_practitioners || 0) +
-                  (report.pediatricians || 0) +
-                  (report.dermatologists || 0)
-                
-                reportsByUser[userId].total_doctors += doctors
-                reportsByUser[userId].total_pharmacies += (report.pharmacies || 0)
-                reportsByUser[userId].total_dispensaries += (report.dispensaries || 0)
-                reportsByUser[userId].total_orders += (report.orders_count || 0)
-                reportsByUser[userId].total_value += (report.orders_value || 0)
+        })
+        
+        console.log('📅 Reports in time range:', filteredReports.length)
+        
+        // Group reports by user and calculate performance
+        const reportsByUser = {}
+        
+        filteredReports.forEach(report => {
+          try {
+            const userId = report.user_id?._id || report.user_id
+            
+            if (!reportsByUser[userId]) {
+              reportsByUser[userId] = {
+                user_id: userId,
+                reports: [],
+                total_doctors: 0,
+                total_pharmacies: 0,
+                total_dispensaries: 0,
+                total_orders: 0,
+                total_value: 0
               }
-            } catch (err) {
-              console.warn('Error processing report:', err)
             }
-          })
-          
-          // Combine with user info
-          const performanceData = Object.values(reportsByUser).map(userData => {
+            
+            reportsByUser[userId].reports.push(report)
+            
+            // Calculate totals
+            const doctors = 
+              (report.dentists || 0) +
+              (report.physiotherapists || 0) +
+              (report.gynecologists || 0) +
+              (report.internists || 0) +
+              (report.general_practitioners || 0) +
+              (report.pediatricians || 0) +
+              (report.dermatologists || 0)
+            
+            reportsByUser[userId].total_doctors += doctors
+            reportsByUser[userId].total_pharmacies += (report.pharmacies || 0)
+            reportsByUser[userId].total_dispensaries += (report.dispensaries || 0)
+            reportsByUser[userId].total_orders += (report.orders_count || 0)
+            reportsByUser[userId].total_value += (report.orders_value || 0)
+          } catch (err) {
+            console.warn('Error processing report:', err)
+          }
+        })
+        
+        // Combine with user info
+        const performanceData = Object.values(reportsByUser)
+          .map(userData => {
             const userInfo = usersData.find(u => 
               u._id === userData.user_id || u.id === userData.user_id
             )
+            
+            if (!userInfo) return null
             
             return {
               user_id: userData.user_id,
@@ -124,16 +150,15 @@ const SupervisorDashboard = () => {
               total_value: userData.total_value
             }
           })
-          
-          console.log('📈 Team performance data:', performanceData)
-          setTeamReports(performanceData)
-        }
+          .filter(Boolean) // Remove null entries
+        
+        console.log('📈 Team performance data (manual):', performanceData)
+        setTeamReports(performanceData)
       }
-    } catch (error) {
-      console.error('❌ Error loading team data:', error)
-      setError(error.response?.data?.message || 'Failed to load team data')
+    } catch (manualError) {
+      console.error('Manual calculation failed:', manualError)
+      setTeamReports([])
     }
-    setLoading(false)
   }
 
   const downloadMonthlyReport = async (userId = null) => {
@@ -241,6 +266,19 @@ const SupervisorDashboard = () => {
         <p style={{ margin: '0', fontSize: '1.2em', opacity: '0.9' }}>
           {user?.name || 'Supervisor'} • {activeMedReps.length} active medreps • {teamReports.length} team members with reports
         </p>
+        
+        {/* Debug Info */}
+        <div style={{ 
+          marginTop: '15px', 
+          fontSize: '0.9em', 
+          opacity: '0.8',
+          background: 'rgba(255,255,255,0.1)',
+          padding: '8px 12px',
+          borderRadius: '6px',
+          display: 'inline-block'
+        }}>
+          🔍 Showing: {timeRange === 'week' ? 'Weekly' : timeRange === 'month' ? 'Monthly' : 'Quarterly'} data
+        </div>
       </div>
 
       {/* Error Message */}
@@ -286,16 +324,16 @@ const SupervisorDashboard = () => {
           icon="👥"
         />
         <StatCard 
-          value={totals.doctors} 
-          label="Total Doctors Visited"
+          value={teamReports.length} 
+          label="Reporting MedReps"
           color="#10b981"
-          icon="👨‍⚕️"
+          icon="📊"
         />
         <StatCard 
-          value={totals.orders} 
-          label="Total Orders Received"
+          value={totals.reports} 
+          label="Total Reports"
           color="#f59e0b"
-          icon="📦"
+          icon="📝"
         />
         <StatCard 
           value={`RWF ${totals.value.toLocaleString()}`} 
@@ -305,6 +343,7 @@ const SupervisorDashboard = () => {
         />
       </div>
 
+      {/* Data Section */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 2fr',
@@ -516,13 +555,44 @@ const SupervisorDashboard = () => {
         </div>
       </div>
 
+      {/* Additional Stats */}
+      {teamReports.length > 0 && (
+        <div style={{
+          background: 'linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%)',
+          padding: '25px',
+          borderRadius: '15px',
+          boxShadow: '0 5px 15px rgba(0,0,0,0.08)',
+          marginBottom: '30px'
+        }}>
+          <h3 style={{ margin: '0 0 15px 0', color: '#2d3436' }}>📈 Team Statistics</h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '15px',
+            color: '#2d3436'
+          }}>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>💰 Average Revenue per Rep:</strong> RWF {Math.round(totals.value / Math.max(teamReports.length, 1)).toLocaleString()}
+            </div>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>📊 Active Reporting:</strong> {teamReports.length} of {activeMedReps.length} active ({Math.round((teamReports.length / Math.max(activeMedReps.length, 1)) * 100)}%)
+            </div>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>📝 Average Reports per Rep:</strong> {Math.round(totals.reports / Math.max(teamReports.length, 1))} reports
+            </div>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>🏥 Total Doctor Visits:</strong> {totals.doctors} visits • {totals.pharmacies + totals.dispensaries} pharmacy visits
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Management Actions */}
       <div style={{
         background: 'white',
         padding: '25px',
         borderRadius: '15px',
-        boxShadow: '0 5px 15px rgba(0,0,0,0.08)',
-        marginBottom: '30px'
+        boxShadow: '0 5px 15px rgba(0,0,0,0.08)'
       }}>
         <h3 style={{ 
           margin: '0 0 20px 0', 
@@ -531,7 +601,7 @@ const SupervisorDashboard = () => {
           paddingBottom: '15px',
           borderBottom: '2px solid #f8fafc'
         }}>
-          🛠️ Management Tools
+          🛠️ Management Actions
         </h3>
         <div style={{ 
           display: 'grid', 
@@ -547,56 +617,25 @@ const SupervisorDashboard = () => {
           />
           <ActionButton 
             icon="📊" 
-            title="Team Analytics" 
+            title="Detailed Analytics" 
             description="View detailed analytics and performance trends for your team"
             onClick={() => window.location.href = '/analytics'}
             color="#10b981"
           />
           <ActionButton 
             icon="👥" 
-            title="Manage Team Members" 
-            description="Add, edit, or deactivate medical representatives"
-            onClick={() => alert('Team management feature coming soon!')}
+            title="Team Management" 
+            description="Manage team members, roles, and assignments"
+            onClick={() => window.location.href = '/users'}
             color="#8b5cf6"
           />
         </div>
       </div>
-
-      {/* Team Summary */}
-      {teamReports.length > 0 && (
-        <div style={{
-          background: 'linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%)',
-          padding: '25px',
-          borderRadius: '15px',
-          boxShadow: '0 5px 15px rgba(0,0,0,0.08)'
-        }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#2d3436' }}>💡 Team Summary</h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-            gap: '15px',
-            color: '#2d3436'
-          }}>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>📊 Average Revenue per Rep:</strong> RWF {Math.round(totals.value / Math.max(teamReports.length, 1)).toLocaleString()}
-            </div>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>👥 Active Reps:</strong> {teamReports.length} of {activeMedReps.length} active ({Math.round((teamReports.length / Math.max(activeMedReps.length, 1)) * 100)}%)
-            </div>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>📈 Average Reports per Rep:</strong> {Math.round(totals.reports / Math.max(teamReports.length, 1))} reports
-            </div>
-            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>💼 Team Activity:</strong> {totals.reports} total reports • {totals.orders} total orders
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
-// Stat Card Component
+// Stat Card Component (same as before)
 const StatCard = ({ value, label, color, icon }) => (
   <div style={{
     background: 'white',
@@ -624,7 +663,7 @@ const StatCard = ({ value, label, color, icon }) => (
   </div>
 )
 
-// Team Member Card Component
+// Team Member Card Component (same as before)
 const TeamMemberCard = ({ member, onDownloadReport, rank }) => (
   <div style={{
     display: 'flex',
@@ -778,7 +817,7 @@ const TeamMemberCard = ({ member, onDownloadReport, rank }) => (
   </div>
 )
 
-// Action Button Component
+// Action Button Component (same as before)
 const ActionButton = ({ icon, title, description, onClick, color }) => (
   <button
     onClick={onClick}
