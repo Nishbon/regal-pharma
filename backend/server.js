@@ -16,6 +16,9 @@ const reportRoutes = require('./routes/reports');
 const analyticsRoutes = require('./routes/analytics');
 const userRoutes = require('./routes/users');
 
+// Import auth middleware
+const { authenticateToken } = require('./middleware/auth');
+
 const app = express();
 
 // Connect to MongoDB
@@ -48,88 +51,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ====================== PUBLIC ROUTES ======================
-app.use('/api/auth', authRoutes);
-
-// ====================== AUTHENTICATION MIDDLEWARE ======================
-app.use(async (req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path}`);
-  
-  // Skip auth for these public routes
-  const publicRoutes = [
-    '/', 
-    '/health', 
-    '/api/health',
-    '/api/auth/login',
-    '/api/auth/logout',
-    '/api/auth/register'
-  ];
-  
-  // Check if current path starts with any public route
-  const isPublic = publicRoutes.some(route => req.path.startsWith(route));
-  
-  if (isPublic) {
-    console.log(`🔓 Public route: ${req.path}`);
-    return next();
-  }
-  
-  // For protected routes, check token
-  const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log(`❌ No auth token for protected route: ${req.path}`);
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required. Please login first.'
-    });
-  }
-  
-  const token = authHeader.replace('Bearer ', '');
-  
-  try {
-    // Verify JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'medical-reporting-system-secret-key-2023');
-    
-    // Verify user exists and is active
-    const user = await User.findOne({ 
-      _id: decoded.id, 
-      is_active: true 
-    }).select('-password -__v');
-    
-    if (!user) {
-      console.log('❌ User not found or inactive');
-      return res.status(401).json({
-        success: false,
-        message: 'Session expired. Please login again.'
-      });
-    }
-    
-    // Add user to request
-    req.user = user.toObject();
-    req.user.isAuthenticated = true;
-    req.user.id = req.user._id.toString();
-    
-    console.log(`✅ Authenticated: ${req.user.username} (${req.user.role})`);
-    next();
-  } catch (error) {
-    console.log('❌ Invalid token:', error.message);
-    return res.status(401).json({
-      success: false,
-      message: 'Invalid or expired token. Please login again.'
-    });
-  }
-});
-
-// ====================== PROTECTED ROUTES ======================
-console.log('\nLOADING PROTECTED ROUTES...');
-
-app.use('/api/reports', reportRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/users', userRoutes);
-
-console.log('✅ All routes loaded successfully\n');
-
-// ====================== PUBLIC ENDPOINTS ======================
+// ====================== PUBLIC ROUTES (NO AUTH) ======================
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
@@ -156,11 +78,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
     message: 'API Server is running',
-    authentication: req.user ? 'Authenticated' : 'Not authenticated',
-    user: req.user ? {
-      username: req.user.username,
-      role: req.user.role
-    } : null
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -179,6 +97,33 @@ app.get('/api/test', (req, res) => {
   });
 });
 
+// ====================== AUTH ROUTES (NO AUTH REQUIRED) ======================
+app.use('/api/auth', authRoutes);
+
+// ====================== PROTECTED ROUTES (REQUIRE AUTH) ======================
+console.log('\nLOADING PROTECTED ROUTES...');
+
+// Apply auth middleware to all routes below this line
+app.use('/api/reports', authenticateToken, reportRoutes);
+app.use('/api/analytics', authenticateToken, analyticsRoutes);
+app.use('/api/users', authenticateToken, userRoutes);
+
+// Test auth endpoint
+app.get('/api/test-auth', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Auth test endpoint working!',
+    user: {
+      id: req.user._id,
+      username: req.user.username,
+      role: req.user.role
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+console.log('✅ All routes loaded successfully\n');
+
 // ====================== ERROR HANDLING ======================
 // 404 handler
 app.use('*', (req, res) => {
@@ -186,13 +131,19 @@ app.use('*', (req, res) => {
     success: false, 
     message: 'Route not found',
     requestedUrl: req.originalUrl,
+    method: req.method,
     availableEndpoints: [
       'GET  /',
       'GET  /health',
       'GET  /api/health',
       'GET  /api/test',
       'POST /api/auth/login',
-      'GET  /api/test-auth'
+      'POST /api/auth/register',
+      'POST /api/auth/logout',
+      'GET  /api/test-auth (requires token)',
+      'GET  /api/reports/* (requires token)',
+      'GET  /api/analytics/* (requires token)',
+      'GET  /api/users/* (requires token)'
     ]
   });
 });
