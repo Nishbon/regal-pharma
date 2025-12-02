@@ -526,7 +526,7 @@ const SupervisorDashboard = () => {
             }}>
               <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>👥</div>
               <h4 style={{ margin: '0 0 15px 0', color: '#1f2937' }}>No Team Data Available</h4>
-              <p style={{ margin: '0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
+              <p style={{ margin: '0 auto', fontSize: '1.1em', maxWidth: '400px' }}>
                 {activeMedReps.length > 0 
                   ? 'Team members haven\'t submitted any reports in the selected time period.'
                   : 'No active medical representatives found in the system.'
