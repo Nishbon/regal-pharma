@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 
 // MongoDB connection
 const connectDB = require('./config/database');
+const User = require('./models/User'); // ADD THIS
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -69,7 +70,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ====================== REAL AUTHENTICATION MIDDLEWARE ======================
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   console.log(`📥 ${req.method} ${req.path}`);
   
   // Skip auth for public routes
@@ -92,18 +93,27 @@ app.use((req, res, next) => {
   try {
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = {
-      id: decoded.id,
-      username: decoded.username,
-      role: decoded.role,
-      name: decoded.name,
-      email: decoded.email,
-      region: decoded.region,
-      isAuthenticated: true
-    };
+    
+    // Verify user exists and is active in database
+    const user = await User.findOne({ 
+      _id: decoded.id, 
+      is_active: true 
+    }).select('-password -__v');
+    
+    if (!user) {
+      console.log('❌ User not found or inactive');
+      req.user = { isAuthenticated: false };
+      return next();
+    }
+    
+    // Convert to plain object and add authentication flag
+    req.user = user.toObject();
+    req.user.isAuthenticated = true;
+    req.user.id = req.user._id.toString(); // Ensure id is string
+    
     console.log(`✅ Authenticated user: ${req.user.username} (${req.user.role})`);
   } catch (error) {
-    console.log('❌ Invalid token:', error.message);
+    console.log('❌ Invalid token or database error:', error.message);
     req.user = { isAuthenticated: false };
   }
   
@@ -116,10 +126,36 @@ console.log('\nLOADING ROUTES...');
 // Public routes
 app.use('/api/auth', authRoutes);
 
-// Protected routes (require authentication)
-app.use('/api/reports', reportRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/users', userRoutes);
+// Protected routes
+app.use('/api/reports', (req, res, next) => {
+  if (!req.user || !req.user.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required. Please login first.'
+    });
+  }
+  next();
+}, reportRoutes);
+
+app.use('/api/analytics', (req, res, next) => {
+  if (!req.user || !req.user.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required. Please login first.'
+    });
+  }
+  next();
+}, analyticsRoutes);
+
+app.use('/api/users', (req, res, next) => {
+  if (!req.user || !req.user.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required. Please login first.'
+    });
+  }
+  next();
+}, userRoutes);
 
 console.log('✅ All routes loaded successfully\n');
 
@@ -132,7 +168,7 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
-    status: 'Running with REAL authentication'
+    authentication: req.user?.isAuthenticated ? 'Authenticated' : 'Not authenticated'
   });
 });
 
@@ -142,7 +178,7 @@ app.get('/health', (req, res) => {
     success: true, 
     message: 'Server is healthy',
     database: 'Connected to MongoDB',
-    authentication: 'JWT-based (no debug bypass)'
+    authentication: 'JWT-based (real authentication)'
   });
 });
 
@@ -150,7 +186,12 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     success: true, 
     message: 'API Server is running',
-    authentication: req.user?.isAuthenticated ? 'Authenticated' : 'Not authenticated'
+    user: req.user?.isAuthenticated ? {
+      id: req.user.id,
+      username: req.user.username,
+      role: req.user.role,
+      isAuthenticated: true
+    } : { isAuthenticated: false }
   });
 });
 
@@ -171,13 +212,13 @@ app.get('/api/test-auth', (req, res) => {
       username: req.user.username,
       role: req.user.role,
       name: req.user.name,
+      email: req.user.email,
+      region: req.user.region,
       isAuthenticated: true
     },
     timestamp: new Date().toISOString()
   });
 });
-
-// REMOVED: /api/debug-login endpoint (no more debug auth)
 
 // ====================== ERROR HANDLING ======================
 // 404 handler
@@ -221,7 +262,7 @@ app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔐 Authentication: JWT (REAL - no debug bypass)`);
+  console.log(`🔐 Authentication: JWT + MongoDB (REAL)`);
   console.log(`📊 MongoDB: ${process.env.MONGODB_URI ? 'Connected' : 'Not configured'}`);
   console.log('='.repeat(50));
   console.log('\n📋 Available Endpoints:');
