@@ -37,7 +37,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// CORS configuration - ALLOW ALL
+// CORS configuration
 app.use(cors({
   origin: '*',
   credentials: true,
@@ -88,7 +88,7 @@ app.get('/api/test', (req, res) => {
   });
 });
 
-// ====================== AUTH ROUTES (PUBLIC) ======================
+// ====================== AUTH ROUTES ======================
 app.use('/api/auth', authRoutes);
 
 // ====================== PROTECTED ROUTES ======================
@@ -124,6 +124,7 @@ app.use('*', (req, res) => {
       'GET  /health',
       'GET  /api/health',
       'GET  /api/test',
+      'GET  /api/auth/test',
       'POST /api/auth/login',
       'POST /api/auth/logout',
       'GET  /api/test-auth',
@@ -154,6 +155,7 @@ app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log('\n📋 Test endpoints:');
   console.log('   GET  /api/test');
+  console.log('   GET  /api/auth/test');
   console.log('   POST /api/auth/login');
   console.log('   GET  /api/health');
   console.log('\n✅ Server ready!');
