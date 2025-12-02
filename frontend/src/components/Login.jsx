@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api'; // This should now work with the updated api.js
+import { authAPI } from '../services/api';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -9,7 +9,6 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [debugInfo, setDebugInfo] = useState('');
   
   const { user, login, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (user && !authLoading) {
-      console.log('User already logged in, redirecting to dashboard...');
       navigate('/dashboard', { replace: true });
     }
   }, [user, authLoading, navigate]);
@@ -37,22 +35,13 @@ const Login = () => {
     }
     
     setError('');
-    setDebugInfo('');
     setLoading(true);
 
     try {
-      console.log('🔐 Attempting login for user:', username);
-      console.log('📡 API Base URL will be:', import.meta.env.PROD ? 'Relative /api' : 'Direct URL');
-      
-      // Use the corrected API endpoint (now uses relative paths)
       const response = await authAPI.login(username.trim(), password.trim());
-      console.log('✅ Login API response:', response.data);
       
       if (response.data.success) {
         const { token, user: userData } = response.data.data;
-        
-        // Debug info
-        setDebugInfo(`✅ Login successful!\nRole: ${userData.role}\nID: ${userData.id}\nToken received: ${token ? 'Yes' : 'No'}`);
         
         // Store token and user data
         localStorage.setItem('token', token);
@@ -64,9 +53,9 @@ const Login = () => {
         // Redirect based on role
         setTimeout(() => {
           if (userData.role === 'supervisor' || userData.role === 'admin') {
-            navigate('/supervisor-dashboard', { replace: true });
+            window.location.href = '/supervisor-dashboard';
           } else {
-            navigate('/dashboard', { replace: true });
+            window.location.href = '/dashboard';
           }
         }, 100);
         
@@ -74,70 +63,19 @@ const Login = () => {
         setError(response.data.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
-      console.error('❌ Login error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: err.config?.url,
-        baseURL: err.config?.baseURL
-      });
-      
-      // Detailed error handling
       if (err.response) {
         // Server responded with error
         const errorMsg = err.response.data?.message || `Server error: ${err.response.status}`;
         setError(`Login failed: ${errorMsg}`);
-        
-        // Show helpful messages for common errors
-        if (err.response.status === 401) {
-          setDebugInfo('Invalid username or password. Please try again.\n\nTest credentials:\n• admin / admin123\n• bonte / bonte123');
-        } else if (err.response.status === 404) {
-          setDebugInfo(`API endpoint not found: ${err.config?.url}\n\nCheck if backend is running on Render.\nMake sure you're using the correct URL.`);
-        } else {
-          setDebugInfo(`Server error: ${err.response.status}\nURL: ${err.config?.url}`);
-        }
       } else if (err.request) {
         // No response received (network error)
-        setError('Cannot connect to server');
-        setDebugInfo(`Network error: ${err.message}\n\nPossible issues:\n1. Backend is down or starting up\n2. CORS issue\n3. Wrong API URL\n\nBackend URL should be: https://regal-pharma-backend.onrender.com`);
+        setError('Cannot connect to server. Please check your internet connection.');
       } else {
         // Other errors
-        setError('Login failed: ' + err.message);
-        setDebugInfo('Check browser console for more details');
+        setError('Login failed. Please try again.');
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Test direct API call (for debugging)
-  const testAPI = async () => {
-    try {
-      console.log('🧪 Testing API connection...');
-      console.log('Current environment:', import.meta.env.MODE);
-      console.log('Is production:', import.meta.env.PROD);
-      
-      // Test both methods
-      setDebugInfo('Testing API connection...\n\nMethod 1: Direct fetch to backend...');
-      
-      // Method 1: Direct fetch to backend
-      try {
-        const directResponse = await fetch('https://regal-pharma-backend.onrender.com/api/health');
-        const directData = await directResponse.json();
-        setDebugInfo(prev => prev + `\n✅ Direct fetch: ${directResponse.status} - ${directData.message}`);
-      } catch (directError) {
-        setDebugInfo(prev => prev + `\n❌ Direct fetch failed: ${directError.message}`);
-      }
-      
-      // Method 2: Through our API service
-      setDebugInfo(prev => prev + '\n\nMethod 2: Through API service...');
-      const response = await authAPI.healthCheck();
-      setDebugInfo(prev => prev + `\n✅ API service: ${response.status} - ${response.data.message || 'OK'}`);
-      
-      console.log('API health response:', response.data);
-    } catch (error) {
-      console.error('API test error details:', error);
-      setDebugInfo(`❌ API Test Failed: ${error.message}\n\nCheck:\n1. Vite proxy configuration\n2. CORS settings on backend\n3. Backend is running`);
     }
   };
 
@@ -150,49 +88,45 @@ const Login = () => {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <div className="login-container">
-        <div className="login-card">
-          <div className="loading-spinner">
-            <div className="spinner"></div>
-            <p>Checking authentication...</p>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+      }}>
+        <div style={{
+          background: 'white',
+          padding: '40px',
+          borderRadius: '10px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+          width: '100%',
+          maxWidth: '400px',
+          textAlign: 'center'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            gap: '20px' 
+          }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid #f3f3f3',
+              borderTop: '4px solid #3498db',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <p style={{ color: '#666', margin: 0 }}>Checking authentication...</p>
           </div>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
-        <style jsx>{`
-          .login-container {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          }
-          .login-card {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-          }
-          .loading-spinner {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-          }
-          .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-          }
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
       </div>
     );
   }
@@ -208,11 +142,11 @@ const Login = () => {
     }}>
       <div style={{
         background: 'white',
-        padding: '40px 30px',
+        padding: '40px',
         borderRadius: '12px',
         boxShadow: '0 15px 35px rgba(0,0,0,0.15)',
         width: '100%',
-        maxWidth: '420px'
+        maxWidth: '400px'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <div style={{
@@ -244,42 +178,6 @@ const Login = () => {
             Medical Representative Portal
           </p>
         </div>
-        
-        {/* Environment Info */}
-        <div style={{
-          background: '#f8f9fa',
-          color: '#6c757d',
-          padding: '10px 14px',
-          borderRadius: '6px',
-          marginBottom: '16px',
-          border: '1px solid #e9ecef',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          textAlign: 'center'
-        }}>
-          Environment: {import.meta.env.MODE} | 
-          Backend: {import.meta.env.PROD ? 'Production' : 'Development'} |
-          Using {import.meta.env.PROD ? 'Proxy' : 'Direct'} API calls
-        </div>
-
-        {/* Debug Info */}
-        {debugInfo && (
-          <div style={{
-            background: import.meta.env.DEV ? '#e8f4fd' : '#fff3cd',
-            color: import.meta.env.DEV ? '#2c3e50' : '#856404',
-            padding: '12px 16px',
-            borderRadius: '6px',
-            marginBottom: '16px',
-            border: import.meta.env.DEV ? '1px solid #b3e0ff' : '1px solid #ffeaa7',
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            whiteSpace: 'pre-wrap',
-            maxHeight: '200px',
-            overflowY: 'auto'
-          }}>
-            {debugInfo}
-          </div>
-        )}
 
         {error && (
           <div style={{
@@ -328,7 +226,7 @@ const Login = () => {
                 transition: 'border 0.3s',
                 outline: 'none'
               }}
-              placeholder="Enter username (e.g., admin, bonte)"
+              placeholder="Enter your username"
               onFocus={(e) => e.target.style.borderColor = '#3498db'}
               onBlur={(e) => e.target.style.borderColor = '#ddd'}
             />
@@ -382,7 +280,7 @@ const Login = () => {
                   transition: 'border 0.3s',
                   outline: 'none'
                 }}
-                placeholder="Enter password"
+                placeholder="Enter your password"
                 onFocus={(e) => e.target.style.borderColor = '#3498db'}
                 onBlur={(e) => e.target.style.borderColor = '#ddd'}
               />
@@ -403,78 +301,22 @@ const Login = () => {
               fontWeight: '600',
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'all 0.3s',
-              boxSizing: 'border-box',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px'
+              boxSizing: 'border-box'
             }}
             onMouseOver={(e) => {
               if (!loading) {
                 e.target.style.background = '#2980b9';
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 5px 15px rgba(52, 152, 219, 0.3)';
               }
             }}
             onMouseOut={(e) => {
               if (!loading) {
                 e.target.style.background = '#3498db';
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
               }
             }}
           >
-            {loading ? (
-              <>
-                <span style={{ fontSize: '18px' }}>⏳</span>
-                Signing In...
-              </>
-            ) : (
-              <>
-                <span style={{ fontSize: '18px' }}>🔐</span>
-                Sign In
-              </>
-            )}
+            {loading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
-
-        {/* Debug buttons */}
-        <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
-          <button
-            onClick={testAPI}
-            style={{
-              flex: 1,
-              padding: '10px',
-              background: '#f8f9fa',
-              color: '#6c757d',
-              border: '1px solid #dee2e6',
-              borderRadius: '6px',
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
-          >
-            🧪 Test API
-          </button>
-          <button
-            onClick={() => {
-              setUsername('admin');
-              setPassword('admin123');
-              setDebugInfo('Test credentials loaded\nUsername: admin\nPassword: admin123');
-            }}
-            style={{
-              flex: 1,
-              padding: '10px',
-              background: '#e8f4fd',
-              color: '#3498db',
-              border: '1px solid #b3e0ff',
-              borderRadius: '6px',
-              fontSize: '14px',
-              cursor: 'pointer'
-            }}
-          >
-            🔧 Load Test Data
-          </button>
-        </div>
 
         <div style={{ 
           marginTop: '30px', 
@@ -483,20 +325,11 @@ const Login = () => {
           textAlign: 'center'
         }}>
           <p style={{ 
-            color: '#7f8c8d', 
-            fontSize: '13px',
-            margin: '5px 0'
-          }}>
-            Demo Credentials: admin / admin123 • bonte / bonte123
-          </p>
-          <p style={{ 
             color: '#bdc3c7', 
             fontSize: '12px',
             margin: '5px 0'
           }}>
-            Frontend: https://regal-pharma-frontend.onrender.com<br />
-            Backend: https://regal-pharma-backend.onrender.com<br />
-            v1.0.0 • © {new Date().getFullYear()} Regal Pharma
+            © {new Date().getFullYear()} Regal Pharma. All rights reserved.
           </p>
         </div>
       </div>
