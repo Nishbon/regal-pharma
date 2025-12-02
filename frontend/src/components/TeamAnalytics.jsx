@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { analyticsAPI } from '../services/api'
-import { useAuth } from '../contexts/AuthContext' // Added AuthContext
+import { useAuth } from '../contexts/AuthContext'
 
 const TeamAnalytics = () => {
-  const { user } = useAuth() // Get current user
+  const { user } = useAuth()
   const [teamPerformance, setTeamPerformance] = useState([])
   const [regionPerformance, setRegionPerformance] = useState([])
   const [timeRange, setTimeRange] = useState('month')
@@ -304,7 +304,7 @@ const TeamAnalytics = () => {
             }}>
               <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>👥</div>
               <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Team Data Available</h4>
-              <p style={{ margin: '0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
+              <p style={{ margin: '0 auto', fontSize: '1.1em', maxWidth: '400px' }}>
                 Team members haven't submitted any reports in the selected time period.
               </p>
               <button
@@ -381,7 +381,7 @@ const TeamAnalytics = () => {
             }}>
               <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>🗺️</div>
               <h4 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Regional Data Available</h4>
-              <p style={{ margin: '0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
+              <p style={{ margin: '0 auto', fontSize: '1.1em', maxWidth: '400px' }}>
                 No regional performance data available.
               </p>
             </div>
