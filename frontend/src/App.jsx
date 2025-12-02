@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import MedRepDashboard from './components/MedRepDashboard';
@@ -60,7 +60,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   return children;
 };
 
-// Role-based dashboard component - UPDATED
+// Role-based dashboard component
 const RoleBasedDashboard = () => {
   const { user } = useAuth();
   
@@ -75,7 +75,7 @@ const RoleBasedDashboard = () => {
   }
 };
 
-// Role-based analytics component - UPDATED
+// Role-based analytics component
 const RoleBasedAnalytics = () => {
   const { user } = useAuth();
   
@@ -88,7 +88,7 @@ const RoleBasedAnalytics = () => {
   }
 };
 
-// Supervisor Dashboard Route (separate from regular dashboard)
+// Supervisor Dashboard Route
 const SupervisorDashboardRoute = () => {
   const { user } = useAuth();
   
@@ -102,10 +102,11 @@ const SupervisorDashboardRoute = () => {
   }
 };
 
-function App() {
-  const { user, loading } = useAuth(); // Get auth state
+// Wrapper component to handle post-login redirects
+const AppContent = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
 
-  // Add useEffect to handle post-login redirect
   useEffect(() => {
     if (user && !loading) {
       // Check if we have a stored redirect path from login
@@ -116,79 +117,90 @@ function App() {
         // Clear the stored path
         sessionStorage.removeItem('postLoginRedirect');
         // Navigate to the intended destination
-        window.location.href = redirectPath;
+        navigate(redirectPath);
       }
     }
-  }, [user, loading]);
+  }, [user, loading, navigate]);
 
+  // Show loading while auth initializes
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Navigate to="/dashboard" />} />
+        
+        {/* MAIN DASHBOARD - Auto-detects role */}
+        <Route 
+          path="dashboard" 
+          element={
+            <ProtectedRoute>
+              <RoleBasedDashboard />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* SUPERVISOR DASHBOARD - Only for supervisors/admins */}
+        <Route 
+          path="supervisor-dashboard" 
+          element={
+            <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
+              <SupervisorDashboardRoute />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* DAILY REPORT - For all authenticated users */}
+        <Route 
+          path="daily-report" 
+          element={
+            <ProtectedRoute>
+              <DailyReport />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* REPORTS HISTORY - For all authenticated users */}
+        <Route 
+          path="reports" 
+          element={
+            <ProtectedRoute>
+              <ReportsHistory />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* ANALYTICS - Role-based */}
+        <Route 
+          path="analytics" 
+          element={
+            <ProtectedRoute>
+              <RoleBasedAnalytics />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Add a 404 route */}
+        <Route path="*" element={
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <h2>404 - Page Not Found</h2>
+            <p>The page you're looking for doesn't exist.</p>
+            <a href="/dashboard">Go to Dashboard</a>
+          </div>
+        } />
+      </Route>
+    </Routes>
+  );
+};
+
+function App() {
   return (
     <Router>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Navigate to="/dashboard" />} />
-            
-            {/* MAIN DASHBOARD - Auto-detects role */}
-            <Route 
-              path="dashboard" 
-              element={
-                <ProtectedRoute>
-                  <RoleBasedDashboard />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* SUPERVISOR DASHBOARD - Only for supervisors/admins */}
-            <Route 
-              path="supervisor-dashboard" 
-              element={
-                <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
-                  <SupervisorDashboardRoute />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* DAILY REPORT - For all authenticated users */}
-            <Route 
-              path="daily-report" 
-              element={
-                <ProtectedRoute>
-                  <DailyReport />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* REPORTS HISTORY - For all authenticated users */}
-            <Route 
-              path="reports" 
-              element={
-                <ProtectedRoute>
-                  <ReportsHistory />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* ANALYTICS - Role-based */}
-            <Route 
-              path="analytics" 
-              element={
-                <ProtectedRoute>
-                  <RoleBasedAnalytics />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Add a 404 route */}
-            <Route path="*" element={
-              <div style={{ padding: '40px', textAlign: 'center' }}>
-                <h2>404 - Page Not Found</h2>
-                <p>The page you're looking for doesn't exist.</p>
-                <a href="/dashboard">Go to Dashboard</a>
-              </div>
-            } />
-          </Route>
-        </Routes>
+        <AppContent />
       </AuthProvider>
     </Router>
   );
