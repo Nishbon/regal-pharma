@@ -9,7 +9,8 @@ const Layout = () => {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    // Remove this line - logout() already handles the redirect
+    // navigate('/login')
   }
 
   return (
