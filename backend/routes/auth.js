@@ -51,10 +51,10 @@ router.post('/login', [
       });
     }
 
-    // Create JWT token
+    // Create JWT token - Use _id, not id
     const token = jwt.sign(
       { 
-        id: user._id.toString(),
+        _id: user._id.toString(),  // ← CHANGED FROM 'id' TO '_id'
         username: user.username, 
         role: user.role,
         name: user.name,
@@ -73,7 +73,7 @@ router.post('/login', [
       data: {
         token,
         user: {
-          id: user._id,
+          id: user._id,  // You can still return as 'id' in response
           username: user.username,
           name: user.name,
           email: user.email,
