@@ -1,9 +1,8 @@
-// frontend/src/services/api.js
 import axios from 'axios';
 
 // Use your Render backend URL
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
-                     'https://regal-pharma-backend.onrender.com/api';
+                     'https://regal-pharma-backend.onrender.com';
 
 console.log('API Base URL:', API_BASE_URL); // Debug - remove in production
 
@@ -57,7 +56,6 @@ api.interceptors.response.use(
     
     if (error.code === 'ECONNABORTED') {
       console.error('Request timeout - Render might be spinning up');
-      // You could trigger a retry here
     }
     
     if (error.response?.status === 401 || error.response?.status === 403) {
@@ -81,131 +79,176 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (username, password) => 
-    api.post('/auth/login', { username, password }),
+    api.post('/api/auth/login', { username, password }), // ✅ Fixed: Added /api/
   
   logout: () => 
-    api.post('/auth/logout'),
+    api.post('/api/auth/logout'), // ✅ Fixed
   
   getProfile: () => 
-    api.get('/auth/profile'),
+    api.get('/api/users/profile/me'), // ✅ Fixed: Changed endpoint
   
-  refreshToken: () => 
-    api.post('/auth/refresh'),
-  
-  validateToken: () => 
-    api.get('/auth/validate'),
-  
-  changePassword: (data) => 
-    api.post('/auth/change-password', data),
+  // Debug endpoint (if exists)
+  debugLogin: (username, password) =>
+    api.post('/api/debug-login', { username, password }),
   
   // Health check endpoint
   healthCheck: () => 
-    api.get('/health', { timeout: 10000 })
+    api.get('/api/health', { timeout: 10000 }) // ✅ Fixed
 };
 
 export const reportsAPI = {
-  submitDaily: (data) => 
-    api.post('/reports/daily', data),
-  
+  // Get user's own reports
   getMyReports: (page = 1, limit = 20) => 
-    api.get(`/reports/my-reports?page=${page}&limit=${limit}`),
+    api.get(`/api/reports/my-reports?page=${page}&limit=${limit}`), // ✅ Fixed
   
+  // Get ALL reports (for supervisors)
+  getAll: () => 
+    api.get('/api/reports/all'), // ✅ Fixed
+  
+  // Create new report
+  create: (data) => 
+    api.post('/api/reports/create', data), // ✅ Fixed
+  
+  // Get single report by ID
   getReport: (id) => 
-    api.get(`/reports/${id}`),
+    api.get(`/api/reports/${id}`), // ✅ Fixed
   
+  // Update report
   updateReport: (id, data) => 
-    api.put(`/reports/${id}`, data),
+    api.put(`/api/reports/${id}`, data), // ✅ Fixed
   
+  // Delete report
   deleteReport: (id) => 
-    api.delete(`/reports/${id}`),
+    api.delete(`/api/reports/${id}`), // ✅ Fixed
   
-  getReportsByDate: (date) => 
-    api.get(`/reports/by-date?date=${date}`)
+  // Get reports by date range
+  getByDateRange: (startDate, endDate) => 
+    api.get(`/api/reports/date-range/${startDate}/${endDate}`), // ✅ Fixed
 };
 
 export const analyticsAPI = {
-  getWeekly: (startDate, endDate) => {
-    const params = new URLSearchParams();
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
-    return api.get(`/analytics/weekly?${params}`);
-  },
+  // Weekly stats for current user
+  getWeekly: () => 
+    api.get('/api/analytics/weekly'), // ✅ Fixed
   
+  // Monthly stats for current user
   getMonthly: () => 
-    api.get('/analytics/monthly'),
+    api.get('/api/analytics/monthly'), // ✅ Fixed
   
-  getTeamPerformance: (period) => 
-    api.get(`/analytics/team-performance?period=${period}`),
+  // Team performance (supervisors only)
+  getTeamPerformance: (period = 'month') => 
+    api.get(`/api/analytics/team-performance?period=${period}`), // ✅ Fixed
   
+  // Region performance (supervisors only)
   getRegionPerformance: () => 
-    api.get('/analytics/region-performance'),
+    api.get('/api/analytics/region-performance'), // ✅ Fixed
   
-  getPersonalStats: (userId) => 
-    api.get(`/analytics/personal/${userId}`),
+  // Dashboard summary
+  getDashboardSummary: () => 
+    api.get('/api/analytics/dashboard-summary'), // ✅ Fixed
   
-  getTrends: (period = 'month') => 
-    api.get(`/analytics/trends?period=${period}`)
+  // Test endpoint
+  test: () => 
+    api.get('/api/analytics/test'), // ✅ Fixed
 };
 
 export const usersAPI = {
+  // Get all users (supervisors only)
   getAll: () => 
-    api.get('/users'),
+    api.get('/api/users'), // ✅ Fixed
   
+  // Create user (supervisors only)
   create: (data) => 
-    api.post('/users', data),
+    api.post('/api/users', data), // ✅ Fixed
   
+  // Update user (supervisors only)
   update: (id, data) => 
-    api.put(`/users/${id}`, data),
+    api.put(`/api/users/${id}`, data), // ✅ Fixed
   
+  // Get user by ID (supervisors only)
   getById: (id) => 
-    api.get(`/users/${id}`),
+    api.get(`/api/users/${id}`), // ✅ Fixed
   
-  delete: (id) => 
-    api.delete(`/users/${id}`),
+  // Get active medreps
+  getActiveMedReps: () => 
+    api.get('/api/users/active-medreps'), // ✅ Fixed
   
-  getTeamMembers: () => 
-    api.get('/users/team'),
+  // Get current user profile
+  getProfile: () => 
+    api.get('/api/users/profile/me'), // ✅ Fixed
   
+  // Update current user profile
   updateProfile: (data) => 
-    api.put('/users/profile', data)
+    api.put('/api/users/profile/me', data), // ✅ Fixed
+  
+  // Get supervisors
+  getSupervisors: () => 
+    api.get('/api/users/supervisors'), // ✅ Fixed
+  
+  // Test auth
+  testAuth: () => 
+    api.get('/api/users/test/auth'), // ✅ Fixed
 };
 
-// Utility function to wait for backend to wake up (Render cold start)
-export const waitForBackend = async (maxAttempts = 10, delay = 5000) => {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+// Test all API endpoints
+export const testAPIConnection = async () => {
+  try {
+    console.log('🧪 Testing API connection...');
+    
+    // Test 1: Health check
+    const health = await api.get('/api/health');
+    console.log('✅ Health check:', health.data);
+    
+    // Test 2: Try to get profile (will fail if no token, but that's OK)
     try {
-      console.log(`Checking backend... Attempt ${attempt}/${maxAttempts}`);
-      const response = await authAPI.healthCheck();
-      if (response.status === 200) {
-        console.log('Backend is ready!');
-        return true;
+      const token = localStorage.getItem('token');
+      if (token) {
+        const profile = await usersAPI.getProfile();
+        console.log('✅ Profile check:', profile.data);
       }
-    } catch (error) {
-      console.log(`Backend not ready yet (${error.message}). Waiting ${delay/1000}s...`);
-      if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, delay));
+    } catch (profileError) {
+      console.log('ℹ️ Profile check failed (no token or invalid):', profileError.message);
+    }
+    
+    // Test 3: Test endpoints that don't require auth
+    const testEndpoints = [
+      '/api/health',
+      '/api/test-auth'
+    ];
+    
+    for (const endpoint of testEndpoints) {
+      try {
+        const response = await api.get(endpoint);
+        console.log(`✅ ${endpoint}:`, response.status, response.data.message || 'OK');
+      } catch (error) {
+        console.log(`ℹ️ ${endpoint}:`, error.message);
       }
     }
+    
+    return true;
+  } catch (error) {
+    console.error('❌ API connection test failed:', error.message);
+    throw error;
   }
-  throw new Error('Backend service did not start in time. Please try again in 30 seconds.');
 };
 
-// Handle Render cold starts by retrying requests
-export const retryRequest = async (requestFn, maxRetries = 3, delay = 2000) => {
-  for (let retry = 1; retry <= maxRetries; retry++) {
-    try {
-      return await requestFn();
-    } catch (error) {
-      if (retry === maxRetries) throw error;
-      
-      if (error.code === 'ECONNABORTED' || !error.response) {
-        console.log(`Retry ${retry}/${maxRetries} after ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay * retry));
-      } else {
-        throw error;
-      }
-    }
+// Initialize API with token from localStorage
+export const initializeAPI = () => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    console.log('🔑 Initializing API with stored token');
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  }
+  
+  // Test connection on startup
+  if (import.meta.env.DEV) {
+    testAPIConnection().catch(() => {
+      console.log('Backend might be starting up...');
+    });
   }
 };
+
+// Call initialization
+initializeAPI();
 
 export default api;
