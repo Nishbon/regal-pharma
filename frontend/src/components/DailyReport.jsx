@@ -47,7 +47,7 @@ const DailyReport = () => {
     // Convert empty strings to 0 for numbers
     const submitData = {
       report_date: formData.report_date,
-      region: formData.region || user?.region || 'Unknown',
+      region: formData.region || user?.region || '',
       dentists: parseInt(formData.dentists) || 0,
       physiotherapists: parseInt(formData.physiotherapists) || 0,
       gynecologists: parseInt(formData.gynecologists) || 0,
@@ -62,22 +62,21 @@ const DailyReport = () => {
       summary: formData.summary || ''
     }
 
-    console.log('📤 Submitting report:', submitData)
-    console.log('📤 API Endpoint: /reports/create')
-    console.log('👤 User ID:', user?._id || user?.id)
+    console.log('Submitting report:', submitData)
+    console.log('API Endpoint: /reports/create')
+    console.log('User ID:', user?._id || user?.id)
 
     try {
-      // CHANGE THIS: Use reportsAPI.create() instead of submitDaily()
       const response = await reportsAPI.create(submitData)
-      console.log('✅ API Response:', response.data)
+      console.log('API Response:', response.data)
       
       if (response.data.success) {
         setMessage({ 
           type: 'success', 
-          text: '🎉 Report submitted successfully! Refreshing dashboard...' 
+          text: 'Report submitted successfully!' 
         })
         
-        // Reset form but keep region and date
+        // Reset form
         setFormData({
           report_date: new Date().toISOString().split('T')[0],
           region: user?.region || '',
@@ -101,7 +100,7 @@ const DailyReport = () => {
           window.dispatchEvent(event)
           setMessage({ 
             type: 'success', 
-            text: '✅ Report saved! Dashboard has been updated.' 
+            text: 'Report saved successfully. Dashboard updated.' 
           })
         }, 1500)
       } else {
@@ -111,10 +110,7 @@ const DailyReport = () => {
         })
       }
     } catch (error) {
-      console.error('❌ Submit error:', error)
-      console.error('Error status:', error.response?.status)
-      console.error('Error data:', error.response?.data)
-      console.error('Error config:', error.config)
+      console.error('Submit error:', error)
       
       let errorMessage = 'Failed to submit report. Please try again.'
       
@@ -154,51 +150,33 @@ const DailyReport = () => {
     <div style={{ padding: '20px 0', minHeight: '100vh', background: '#f8f9fa' }}>
       {/* Header */}
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
         color: 'white',
         padding: '30px',
-        borderRadius: '15px',
+        borderRadius: '12px',
         marginBottom: '30px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
         position: 'relative'
       }}>
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          display: 'flex',
-          gap: '10px',
-          alignItems: 'center'
-        }}>
-          <div style={{ 
-            fontSize: '0.85em', 
-            background: 'rgba(255,255,255,0.2)',
-            padding: '4px 12px',
-            borderRadius: '12px'
-          }}>
-            {user?.region || 'All Regions'}
-          </div>
-        </div>
-
-        <h1 style={{ margin: '0 0 10px 0', fontSize: '2.2em', fontWeight: '300' }}>
-          Daily Activity Report 📋
+        <h1 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: '600' }}>
+          Daily Activity Report
         </h1>
-        <p style={{ margin: '0', fontSize: '1.1em', opacity: '0.9' }}>
+        <p style={{ margin: '0', fontSize: '16px', opacity: '0.9' }}>
           Complete your daily reporting for {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
         
-        {/* Debug Info */}
-        <div style={{ 
-          marginTop: '15px', 
-          fontSize: '0.85em', 
-          opacity: '0.8',
-          background: 'rgba(255,255,255,0.1)',
-          padding: '6px 12px',
-          borderRadius: '6px',
-          display: 'inline-block'
-        }}>
-          📝 Submitting to: /reports/create
-        </div>
+        {user?.region && (
+          <div style={{ 
+            marginTop: '15px', 
+            fontSize: '14px', 
+            background: 'rgba(255,255,255,0.15)',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            display: 'inline-block'
+          }}>
+            Region: {user.region}
+          </div>
+        )}
       </div>
 
       {/* Progress Summary */}
@@ -210,31 +188,23 @@ const DailyReport = () => {
       }}>
         <SummaryCard 
           value={totalDoctors} 
-          label="Total Doctors" 
-          color="#3498db"
-          icon="👨‍⚕️"
-          subtitle="Doctors visited today"
+          label="Total Doctors"
+          color="#2563eb"
         />
         <SummaryCard 
           value={(parseInt(formData.pharmacies) || 0) + (parseInt(formData.dispensaries) || 0)} 
-          label="Facilities Visited" 
-          color="#2ecc71"
-          icon="💊"
-          subtitle="Pharmacies + Dispensaries"
+          label="Facilities Visited"
+          color="#10b981"
         />
         <SummaryCard 
           value={parseInt(formData.orders_count) || 0} 
-          label="Orders Received" 
-          color="#e74c3c"
-          icon="📦"
-          subtitle="Total orders today"
+          label="Orders Received"
+          color="#ef4444"
         />
         <SummaryCard 
           value={`RWF ${(parseInt(formData.orders_value) || 0).toLocaleString()}`} 
-          label="Order Value" 
-          color="#f39c12"
-          icon="💰"
-          subtitle="Revenue generated"
+          label="Order Value"
+          color="#f59e0b"
         />
       </div>
 
@@ -242,26 +212,31 @@ const DailyReport = () => {
       <div style={{
         background: 'white',
         padding: '40px',
-        borderRadius: '15px',
-        boxShadow: '0 5px 15px rgba(0,0,0,0.08)',
-        maxWidth: '1200px',
-        margin: '0 auto'
+        borderRadius: '12px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+        maxWidth: '1000px',
+        margin: '0 auto',
+        border: '1px solid #e5e7eb'
       }}>
         {message && (
           <div style={{
             padding: '15px 20px',
-            background: message.type === 'success' ? '#d4edda' : '#f8d7da',
-            color: message.type === 'success' ? '#155724' : '#721c24',
-            borderRadius: '10px',
+            background: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
+            color: message.type === 'success' ? '#065f46' : '#991b1b',
+            borderRadius: '8px',
             marginBottom: '30px',
-            border: `1px solid ${message.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
-            fontSize: '1em',
+            border: `1px solid ${message.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+            fontSize: '15px',
             display: 'flex',
             alignItems: 'center',
-            gap: '10px'
+            gap: '12px'
           }}>
-            <div style={{ fontSize: '1.2em' }}>
-              {message.type === 'success' ? '✅' : '⚠️'}
+            <div style={{ 
+              fontSize: '18px', 
+              fontWeight: 'bold',
+              color: message.type === 'success' ? '#10b981' : '#ef4444'
+            }}>
+              {message.type === 'success' ? '✓' : '✗'}
             </div>
             <div style={{ flex: 1 }}>
               {message.text}
@@ -272,12 +247,14 @@ const DailyReport = () => {
                 style={{
                   background: 'none',
                   border: 'none',
-                  fontSize: '1.2em',
+                  fontSize: '18px',
                   cursor: 'pointer',
-                  color: '#721c24'
+                  color: '#991b1b',
+                  opacity: '0.7',
+                  ':hover': { opacity: '1' }
                 }}
               >
-                ✕
+                ×
               </button>
             )}
           </div>
@@ -285,7 +262,7 @@ const DailyReport = () => {
 
         <form onSubmit={handleSubmit}>
           {/* Basic Information */}
-          <Section title="📅 Basic Information" description="Enter the basic details of your daily report">
+          <Section title="Basic Information">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
               <FormField
                 label="Report Date"
@@ -293,35 +270,33 @@ const DailyReport = () => {
                 type="date"
                 value={formData.report_date}
                 onChange={handleChange}
-                required
               />
               <FormField
-                label="Region Worked"
+                label="Region"
                 name="region"
                 type="text"
                 value={formData.region}
                 onChange={handleChange}
-                placeholder="Enter the region you worked in today"
-                required
+                placeholder="Enter region (optional)"
               />
             </div>
           </Section>
 
           {/* Doctors Visited */}
-          <Section title="👨‍⚕️ Doctors Visited Today" description="Enter the number of each type of doctor you visited">
+          <Section title="Doctors Visited">
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
               gap: '20px' 
             }}>
               {[
-                { name: 'dentists', label: 'Dentists', emoji: '🦷' },
-                { name: 'physiotherapists', label: 'Physiotherapists', emoji: '💪' },
-                { name: 'gynecologists', label: 'Gynecologists', emoji: '👩‍⚕️' },
-                { name: 'internists', label: 'Internists', emoji: '🫀' },
-                { name: 'general_practitioners', label: 'General Practitioners', emoji: '🩺' },
-                { name: 'pediatricians', label: 'Pediatricians', emoji: '👶' },
-                { name: 'dermatologists', label: 'Dermatologists', emoji: '🌟' }
+                { name: 'dentists', label: 'Dentists' },
+                { name: 'physiotherapists', label: 'Physiotherapists' },
+                { name: 'gynecologists', label: 'Gynecologists' },
+                { name: 'internists', label: 'Internists' },
+                { name: 'general_practitioners', label: 'General Practitioners' },
+                { name: 'pediatricians', label: 'Pediatricians' },
+                { name: 'dermatologists', label: 'Dermatologists' }
               ].map(field => (
                 <NumberField
                   key={field.name}
@@ -329,224 +304,158 @@ const DailyReport = () => {
                   name={field.name}
                   value={formData[field.name]}
                   onChange={handleNumberChange}
-                  emoji={field.emoji}
                 />
               ))}
             </div>
             
             {totalDoctors > 0 && (
               <div style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                padding: '20px',
-                borderRadius: '10px',
+                background: '#f0f9ff',
+                padding: '15px 20px',
+                borderRadius: '8px',
                 marginTop: '20px',
-                textAlign: 'center',
-                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                border: '1px solid #e0f2fe'
               }}>
-                <div style={{ fontSize: '1.2em', fontWeight: '600', marginBottom: '5px' }}>
-                  Total Doctors Visited Today: {totalDoctors}
-                </div>
-                <div style={{ fontSize: '0.9em', opacity: '0.9' }}>
-                  {totalDoctors} different doctors visited across all specialties
+                <div style={{ fontSize: '15px', fontWeight: '600', color: '#0369a1', marginBottom: '5px' }}>
+                  Total Doctors Visited: {totalDoctors}
                 </div>
               </div>
             )}
           </Section>
 
           {/* Facilities */}
-          <Section title="💊 Pharmacies & Dispensaries" description="Enter the number of pharmacies and dispensaries visited">
+          <Section title="Facilities Visited">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
               <NumberField
-                label="Pharmacies Visited"
+                label="Pharmacies"
                 name="pharmacies"
                 value={formData.pharmacies}
                 onChange={handleNumberChange}
-                emoji="🏥"
               />
               <NumberField
-                label="Dispensaries Visited"
+                label="Dispensaries"
                 name="dispensaries"
                 value={formData.dispensaries}
                 onChange={handleNumberChange}
-                emoji="💊"
               />
             </div>
             
             {totalVisits > 0 && (
               <div style={{
-                background: 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)',
-                color: 'white',
-                padding: '20px',
-                borderRadius: '10px',
+                background: '#f0fdf4',
+                padding: '15px 20px',
+                borderRadius: '8px',
                 marginTop: '20px',
-                textAlign: 'center',
-                boxShadow: '0 4px 15px rgba(46, 204, 113, 0.3)'
+                border: '1px solid #dcfce7'
               }}>
-                <div style={{ fontSize: '1.2em', fontWeight: '600', marginBottom: '5px' }}>
-                  Total Visits Today: {totalVisits}
-                </div>
-                <div style={{ fontSize: '0.9em', opacity: '0.9' }}>
-                  {totalDoctors} doctors + {totalVisits - totalDoctors} facilities
+                <div style={{ fontSize: '15px', fontWeight: '600', color: '#15803d', marginBottom: '5px' }}>
+                  Total Visits: {totalVisits} (Doctors: {totalDoctors}, Facilities: {totalVisits - totalDoctors})
                 </div>
               </div>
             )}
           </Section>
 
           {/* Orders */}
-          <Section title="📦 Orders Received" description="Enter order details received today">
+          <Section title="Orders Received">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
               <NumberField
                 label="Number of Orders"
                 name="orders_count"
                 value={formData.orders_count}
                 onChange={handleNumberChange}
-                emoji="📦"
               />
               <NumberField
                 label="Total Order Value (RWF)"
                 name="orders_value"
                 value={formData.orders_value}
                 onChange={handleNumberChange}
-                emoji="💰"
                 step="1000"
               />
             </div>
             
             {(parseInt(formData.orders_count) > 0 || parseInt(formData.orders_value) > 0) && (
               <div style={{
-                background: 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)',
-                color: 'white',
-                padding: '20px',
-                borderRadius: '10px',
+                background: '#fef2f2',
+                padding: '15px 20px',
+                borderRadius: '8px',
                 marginTop: '20px',
-                textAlign: 'center',
-                boxShadow: '0 4px 15px rgba(231, 76, 60, 0.3)'
-              }}>
-                <div style={{ fontSize: '1.2em', fontWeight: '600', marginBottom: '5px' }}>
-                  Order Summary
-                </div>
-                <div style={{ fontSize: '0.95em', opacity: '0.9' }}>
-                  {parseInt(formData.orders_count) || 0} orders • RWF {(parseInt(formData.orders_value) || 0).toLocaleString()}
+                border: '1px solid '#fecaca' }}
+              >
+                <div style={{ fontSize: '15px', fontWeight: '600', color: '#b91c1c', marginBottom: '5px' }}>
+                  Orders: {parseInt(formData.orders_count) || 0} • Value: RWF {(parseInt(formData.orders_value) || 0).toLocaleString()}
                 </div>
               </div>
             )}
           </Section>
 
           {/* Summary */}
-          <Section title="📝 Daily Summary" description="Provide a brief summary of today's activities">
+          <Section title="Daily Summary">
             <FormField
-              label="Daily Summary"
+              label="Summary"
               name="summary"
               type="textarea"
               value={formData.summary}
               onChange={handleChange}
-              placeholder="Brief summary of today's activities, names of clinics and pharmacies visited, important discussions with doctors, challenges faced, achievements..."
-              rows={6}
+              placeholder="Enter summary of today's activities (optional)"
+              rows={5}
             />
             <div style={{
-              background: '#f8f9fa',
-              padding: '15px',
-              borderRadius: '8px',
+              background: '#f8fafc',
+              padding: '12px 15px',
+              borderRadius: '6px',
               marginTop: '10px',
-              fontSize: '0.9em',
-              color: '#666',
-              borderLeft: '3px solid #667eea'
+              fontSize: '14px',
+              color: '#4b5563',
+              borderLeft: '3px solid #e5e7eb'
             }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-                <div style={{ fontSize: '1.2em' }}>💡</div>
-                <div>
-                  <strong>Tips for a good summary:</strong>
-                  <ul style={{ margin: '10px 0 0 0', paddingLeft: '20px' }}>
-                    <li>Mention specific clinics/pharmacies visited</li>
-                    <li>Note important discussions with doctors</li>
-                    <li>Document any follow-up requirements</li>
-                    <li>Share achievements or challenges faced</li>
-                    <li>Include product feedback received</li>
-                  </ul>
-                </div>
-              </div>
+              <div style={{ fontWeight: '600', marginBottom: '5px', color: '#374151' }}>Guidelines:</div>
+              <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px', lineHeight: '1.5' }}>
+                <li>Include specific clinics/pharmacies visited</li>
+                <li>Note important discussions or feedback</li>
+                <li>Document follow-up requirements</li>
+                <li>Mention any challenges or achievements</li>
+              </ul>
             </div>
           </Section>
-
-          {/* Form Validation Summary */}
-          <div style={{
-            background: '#fff3cd',
-            padding: '15px',
-            borderRadius: '8px',
-            marginBottom: '25px',
-            border: '1px solid #ffeaa7',
-            color: '#856404',
-            fontSize: '0.9em'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-              <div style={{ fontSize: '1.2em' }}>📋</div>
-              <strong>Form Validation</strong>
-            </div>
-            <ul style={{ margin: '10px 0 0 0', paddingLeft: '20px' }}>
-              <li>Date and Region are required</li>
-              <li>Doctor counts should be numbers (0 or more)</li>
-              <li>Orders value should be in RWF</li>
-              <li>Summary is optional but recommended</li>
-            </ul>
-          </div>
 
           {/* Submit Button */}
           <div style={{ 
             marginTop: '40px', 
             paddingTop: '25px', 
-            borderTop: '2px solid #f8f9fa',
+            borderTop: '2px solid #f3f4f6',
             textAlign: 'center'
           }}>
             <button 
               type="submit" 
               disabled={loading}
               style={{
-                background: loading ? '#ccc' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: loading ? '#d1d5db' : '#2563eb',
                 color: 'white',
                 border: 'none',
-                padding: '15px 40px',
-                borderRadius: '50px',
-                fontSize: '1.1em',
+                padding: '14px 40px',
+                borderRadius: '8px',
+                fontSize: '16px',
                 fontWeight: '600',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 5px 15px rgba(0,0,0,0.2)',
-                transition: 'all 0.3s ease',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s ease',
                 minWidth: '200px',
-                opacity: loading ? 0.7 : 1
-              }}
-              onMouseOver={(e) => {
-                if (!loading) {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
-                }
-              }}
-              onMouseOut={(e) => {
-                if (!loading) {
-                  e.target.style.transform = 'translateY(0)';
-                  e.target.style.boxShadow = '0 5px 15px rgba(0,0,0,0.2)';
+                ':hover': loading ? {} : {
+                  background: '#1d4ed8',
+                  boxShadow: '0 4px 10px rgba(37, 99, 235, 0.3)',
+                  transform: 'translateY(-1px)'
                 }
               }}
             >
-              {loading ? (
-                <>
-                  <span style={{ marginRight: '10px' }}>⏳</span>
-                  Submitting Report...
-                </>
-              ) : (
-                <>
-                  <span style={{ marginRight: '10px' }}>🚀</span>
-                  Submit Daily Report
-                </>
-              )}
+              {loading ? 'Submitting...' : 'Submit Report'}
             </button>
             
             <div style={{ 
-              marginTop: '15px', 
-              color: '#7f8c8d', 
-              fontSize: '0.9em' 
+              marginTop: '12px', 
+              color: '#6b7280', 
+              fontSize: '14px' 
             }}>
-              📁 All information will be saved securely to your account
+              All data is saved securely
             </div>
           </div>
         </form>
@@ -555,17 +464,18 @@ const DailyReport = () => {
       {/* Footer Note */}
       <div style={{
         marginTop: '30px',
-        padding: '20px',
-        background: '#f8f9fa',
-        borderRadius: '10px',
-        fontSize: '0.9em',
-        color: '#7f8c8d',
+        padding: '15px',
+        background: '#f8fafc',
+        borderRadius: '8px',
+        fontSize: '14px',
+        color: '#6b7280',
         textAlign: 'center',
-        border: '1px solid #e9ecef'
+        border: '1px solid #e5e7eb',
+        maxWidth: '800px',
+        margin: '30px auto 0'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '5px' }}>
-          <span>ℹ️</span>
-          <strong>Important:</strong>
+        <div style={{ fontWeight: '600', marginBottom: '5px', color: '#374151' }}>
+          Note:
         </div>
         <div>
           Submit your report at the end of each working day. All reports are timestamped and linked to your account.
@@ -576,41 +486,32 @@ const DailyReport = () => {
 }
 
 // Reusable Components
-const Section = ({ title, description, children }) => (
-  <div style={{ marginBottom: '40px' }}>
+const Section = ({ title, children }) => (
+  <div style={{ marginBottom: '35px' }}>
     <h3 style={{ 
-      margin: '0 0 10px 0', 
-      color: '#2c3e50', 
-      fontSize: '1.4em',
+      margin: '0 0 15px 0', 
+      color: '#111827', 
+      fontSize: '18px',
       paddingBottom: '10px',
-      borderBottom: '2px solid #f8f9fa',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px'
+      borderBottom: '1px solid #e5e7eb',
+      fontWeight: '600'
     }}>
       {title}
     </h3>
-    <p style={{ 
-      margin: '0 0 25px 0', 
-      color: '#7f8c8d',
-      fontSize: '1em'
-    }}>
-      {description}
-    </p>
     {children}
   </div>
 )
 
-const FormField = ({ label, name, type = 'text', value, onChange, placeholder, required, rows }) => (
+const FormField = ({ label, name, type = 'text', value, onChange, placeholder, rows }) => (
   <div style={{ marginBottom: '20px' }}>
     <label style={{ 
       display: 'block', 
       marginBottom: '8px', 
-      fontWeight: '600', 
-      color: '#2c3e50',
-      fontSize: '1em'
+      fontWeight: '500', 
+      color: '#374151',
+      fontSize: '14px'
     }}>
-      {label} {required && <span style={{ color: '#e74c3c' }}>*</span>}
+      {label}
     </label>
     {type === 'textarea' ? (
       <textarea
@@ -619,25 +520,21 @@ const FormField = ({ label, name, type = 'text', value, onChange, placeholder, r
         onChange={onChange}
         placeholder={placeholder}
         rows={rows}
-        required={required}
         style={{
           width: '100%',
-          padding: '15px',
-          border: '2px solid #e9ecef',
-          borderRadius: '10px',
-          fontSize: '1em',
+          padding: '12px 15px',
+          border: '1px solid #d1d5db',
+          borderRadius: '6px',
+          fontSize: '14px',
           fontFamily: 'inherit',
           resize: 'vertical',
-          transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
-          minHeight: '120px'
-        }}
-        onFocus={(e) => {
-          e.target.style.borderColor = '#667eea';
-          e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = '#e9ecef';
-          e.target.style.boxShadow = 'none';
+          transition: 'border-color 0.2s ease',
+          minHeight: '100px',
+          ':focus': {
+            outline: 'none',
+            borderColor: '#2563eb',
+            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)'
+          }
         }}
       />
     ) : (
@@ -647,38 +544,33 @@ const FormField = ({ label, name, type = 'text', value, onChange, placeholder, r
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        required={required}
         style={{
           width: '100%',
-          padding: '15px',
-          border: '2px solid #e9ecef',
-          borderRadius: '10px',
-          fontSize: '1em',
-          transition: 'border-color 0.3s ease, box-shadow 0.3s ease'
-        }}
-        onFocus={(e) => {
-          e.target.style.borderColor = '#667eea';
-          e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = '#e9ecef';
-          e.target.style.boxShadow = 'none';
+          padding: '12px 15px',
+          border: '1px solid #d1d5db',
+          borderRadius: '6px',
+          fontSize: '14px',
+          transition: 'border-color 0.2s ease',
+          ':focus': {
+            outline: 'none',
+            borderColor: '#2563eb',
+            boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)'
+          }
         }}
       />
     )}
   </div>
 )
 
-const NumberField = ({ label, name, value, onChange, emoji, step }) => (
+const NumberField = ({ label, name, value, onChange, step }) => (
   <div style={{ marginBottom: '15px' }}>
     <label style={{ 
       display: 'block', 
       marginBottom: '8px', 
-      fontWeight: '600', 
-      color: '#2c3e50',
-      fontSize: '0.95em'
+      fontWeight: '500', 
+      color: '#374151',
+      fontSize: '14px'
     }}>
-      <span style={{ marginRight: '8px', fontSize: '1.1em' }}>{emoji}</span>
       {label}
     </label>
     <input
@@ -690,51 +582,43 @@ const NumberField = ({ label, name, value, onChange, emoji, step }) => (
       step={step || "1"}
       style={{
         width: '100%',
-        padding: '12px 15px',
-        border: '2px solid #e9ecef',
-        borderRadius: '8px',
-        fontSize: '1em',
-        transition: 'border-color 0.3s ease, box-shadow 0.3s ease'
-      }}
-      onFocus={(e) => {
-        e.target.style.borderColor = '#667eea';
-        e.target.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.1)';
-      }}
-      onBlur={(e) => {
-        e.target.style.borderColor = '#e9ecef';
-        e.target.style.boxShadow = 'none';
+        padding: '10px 12px',
+        border: '1px solid #d1d5db',
+        borderRadius: '6px',
+        fontSize: '14px',
+        transition: 'border-color 0.2s ease',
+        ':focus': {
+          outline: 'none',
+          borderColor: '#2563eb',
+          boxShadow: '0 0 0 3px rgba(37, 99, 235, 0.1)'
+        }
       }}
     />
   </div>
 )
 
-const SummaryCard = ({ value, label, color, icon, subtitle }) => (
+const SummaryCard = ({ value, label, color }) => (
   <div style={{
     background: 'white',
     padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 3px 10px rgba(0,0,0,0.08)',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
     textAlign: 'center',
-    borderLeft: `4px solid ${color}`,
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    borderTop: `3px solid ${color}`,
+    transition: 'box-shadow 0.2s ease',
     ':hover': {
-      transform: 'translateY(-5px)',
-      boxShadow: '0 5px 20px rgba(0,0,0,0.12)'
+      boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
     }
   }}>
-    <div style={{ fontSize: '2em', marginBottom: '10px' }}>{icon}</div>
     <div style={{ 
-      fontSize: '1.5em', 
+      fontSize: '24px', 
       fontWeight: 'bold', 
       color: color,
-      marginBottom: '5px'
+      marginBottom: '8px'
     }}>
       {value}
     </div>
-    <div style={{ color: '#2c3e50', fontSize: '0.95em', fontWeight: '500', marginBottom: '3px' }}>{label}</div>
-    {subtitle && (
-      <div style={{ color: '#7f8c8d', fontSize: '0.8em' }}>{subtitle}</div>
-    )}
+    <div style={{ color: '#4b5563', fontSize: '14px', fontWeight: '500' }}>{label}</div>
   </div>
 )
 
