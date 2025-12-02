@@ -5,6 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Regal Pharma</title>
+    
+    <!-- 🔥 CRUCIAL FOR SPA ROUTING ON RENDER -->
+    <!-- This tells the browser all relative URLs should start from root -->
+    <base href="/" />
+    
     <style>
       * {
         margin: 0;
@@ -15,10 +20,61 @@
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         background: #f5f7fa;
       }
+      
+      /* Optional: Add a loading animation */
+      #root:empty::before {
+        content: '';
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: translate(-50%, -50%) rotate(0deg); }
+        100% { transform: translate(-50%, -50%) rotate(360deg); }
+      }
     </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Optional: Add a noscript message for better UX -->
+    <noscript>
+      <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        padding: 20px;
+        z-index: 9999;
+      ">
+        <div>
+          <h2 style="color: #e74c3c; margin-bottom: 20px;">
+            JavaScript is Required
+          </h2>
+          <p style="margin-bottom: 20px; max-width: 500px;">
+            This application requires JavaScript to function properly. 
+            Please enable JavaScript in your browser settings and refresh the page.
+          </p>
+          <p style="color: #7f8c8d; font-size: 14px;">
+            Regal Pharma Medical Reporting System
+          </p>
+        </div>
+      </div>
+    </noscript>
   </body>
 </html>
