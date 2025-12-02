@@ -379,8 +379,8 @@ const DailyReport = () => {
                 padding: '15px 20px',
                 borderRadius: '8px',
                 marginTop: '20px',
-                border: '1px solid '#fecaca' }}
-              >
+                border: '1px solid #fecaca'
+              }}>
                 <div style={{ fontSize: '15px', fontWeight: '600', color: '#b91c1c', marginBottom: '5px' }}>
                   Orders: {parseInt(formData.orders_count) || 0} • Value: RWF {(parseInt(formData.orders_value) || 0).toLocaleString()}
                 </div>
