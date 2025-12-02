@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api'; // Import the API
+import { authAPI } from '../services/api'; // This should now work with the updated api.js
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -42,8 +42,9 @@ const Login = () => {
 
     try {
       console.log('🔐 Attempting login for user:', username);
+      console.log('📡 API Base URL will be:', import.meta.env.PROD ? 'Relative /api' : 'Direct URL');
       
-      // Use the corrected API endpoint
+      // Use the corrected API endpoint (now uses relative paths)
       const response = await authAPI.login(username.trim(), password.trim());
       console.log('✅ Login API response:', response.data);
       
@@ -51,7 +52,7 @@ const Login = () => {
         const { token, user: userData } = response.data.data;
         
         // Debug info
-        setDebugInfo(`Login successful! Role: ${userData.role}, ID: ${userData.id}`);
+        setDebugInfo(`✅ Login successful!\nRole: ${userData.role}\nID: ${userData.id}\nToken received: ${token ? 'Yes' : 'No'}`);
         
         // Store token and user data
         localStorage.setItem('token', token);
@@ -73,24 +74,37 @@ const Login = () => {
         setError(response.data.message || 'Login failed. Please check your credentials.');
       }
     } catch (err) {
-      console.error('❌ Login error:', err);
+      console.error('❌ Login error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        url: err.config?.url,
+        baseURL: err.config?.baseURL
+      });
       
       // Detailed error handling
       if (err.response) {
         // Server responded with error
-        setError(`Server error: ${err.response.status} - ${err.response.data?.message || 'Unknown error'}`);
-        setDebugInfo(`URL: ${err.config?.url}, Status: ${err.response.status}`);
+        const errorMsg = err.response.data?.message || `Server error: ${err.response.status}`;
+        setError(`Login failed: ${errorMsg}`);
+        
+        // Show helpful messages for common errors
+        if (err.response.status === 401) {
+          setDebugInfo('Invalid username or password. Please try again.\n\nTest credentials:\n• admin / admin123\n• bonte / bonte123');
+        } else if (err.response.status === 404) {
+          setDebugInfo(`API endpoint not found: ${err.config?.url}\n\nCheck if backend is running on Render.\nMake sure you're using the correct URL.`);
+        } else {
+          setDebugInfo(`Server error: ${err.response.status}\nURL: ${err.config?.url}`);
+        }
       } else if (err.request) {
-        // No response received
-        setError('No response from server. Backend might be down or URL is incorrect.');
-        setDebugInfo('Check if backend is running on Render');
+        // No response received (network error)
+        setError('Cannot connect to server');
+        setDebugInfo(`Network error: ${err.message}\n\nPossible issues:\n1. Backend is down or starting up\n2. CORS issue\n3. Wrong API URL\n\nBackend URL should be: https://regal-pharma-backend.onrender.com`);
       } else {
         // Other errors
         setError('Login failed: ' + err.message);
+        setDebugInfo('Check browser console for more details');
       }
-      
-      // Show test credentials for debugging
-      setDebugInfo(prev => prev + '\n\nTest credentials:\nadmin / admin123\nbonte / bonte123\njohn / john123');
     } finally {
       setLoading(false);
     }
@@ -100,12 +114,30 @@ const Login = () => {
   const testAPI = async () => {
     try {
       console.log('🧪 Testing API connection...');
+      console.log('Current environment:', import.meta.env.MODE);
+      console.log('Is production:', import.meta.env.PROD);
+      
+      // Test both methods
+      setDebugInfo('Testing API connection...\n\nMethod 1: Direct fetch to backend...');
+      
+      // Method 1: Direct fetch to backend
+      try {
+        const directResponse = await fetch('https://regal-pharma-backend.onrender.com/api/health');
+        const directData = await directResponse.json();
+        setDebugInfo(prev => prev + `\n✅ Direct fetch: ${directResponse.status} - ${directData.message}`);
+      } catch (directError) {
+        setDebugInfo(prev => prev + `\n❌ Direct fetch failed: ${directError.message}`);
+      }
+      
+      // Method 2: Through our API service
+      setDebugInfo(prev => prev + '\n\nMethod 2: Through API service...');
       const response = await authAPI.healthCheck();
-      setDebugInfo(`API Health: ${response.status} - ${response.data.message || 'OK'}`);
+      setDebugInfo(prev => prev + `\n✅ API service: ${response.status} - ${response.data.message || 'OK'}`);
+      
       console.log('API health response:', response.data);
     } catch (error) {
-      setDebugInfo(`API Test Failed: ${error.message}`);
-      console.error('API test error:', error);
+      console.error('API test error details:', error);
+      setDebugInfo(`❌ API Test Failed: ${error.message}\n\nCheck:\n1. Vite proxy configuration\n2. CORS settings on backend\n3. Backend is running`);
     }
   };
 
@@ -144,8 +176,8 @@ const Login = () => {
           }
           .loading-spinner {
             display: flex;
-            flexDirection: column;
-            alignItems: center;
+            flex-direction: column;
+            align-items: center;
             gap: 20px;
           }
           .spinner {
@@ -213,15 +245,32 @@ const Login = () => {
           </p>
         </div>
         
-        {/* Debug Info - Show in development */}
-        {import.meta.env.DEV && debugInfo && (
+        {/* Environment Info */}
+        <div style={{
+          background: '#f8f9fa',
+          color: '#6c757d',
+          padding: '10px 14px',
+          borderRadius: '6px',
+          marginBottom: '16px',
+          border: '1px solid #e9ecef',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          textAlign: 'center'
+        }}>
+          Environment: {import.meta.env.MODE} | 
+          Backend: {import.meta.env.PROD ? 'Production' : 'Development'} |
+          Using {import.meta.env.PROD ? 'Proxy' : 'Direct'} API calls
+        </div>
+
+        {/* Debug Info */}
+        {debugInfo && (
           <div style={{
-            background: '#e8f4fd',
-            color: '#2c3e50',
+            background: import.meta.env.DEV ? '#e8f4fd' : '#fff3cd',
+            color: import.meta.env.DEV ? '#2c3e50' : '#856404',
             padding: '12px 16px',
             borderRadius: '6px',
             marginBottom: '16px',
-            border: '1px solid #b3e0ff',
+            border: import.meta.env.DEV ? '1px solid #b3e0ff' : '1px solid #ffeaa7',
             fontSize: '12px',
             fontFamily: 'monospace',
             whiteSpace: 'pre-wrap',
@@ -389,13 +438,12 @@ const Login = () => {
           </button>
         </form>
 
-        {/* Debug button for development */}
-        {import.meta.env.DEV && (
+        {/* Debug buttons */}
+        <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
           <button
             onClick={testAPI}
             style={{
-              marginTop: '16px',
-              width: '100%',
+              flex: 1,
               padding: '10px',
               background: '#f8f9fa',
               color: '#6c757d',
@@ -405,9 +453,28 @@ const Login = () => {
               cursor: 'pointer'
             }}
           >
-            🧪 Test API Connection
+            🧪 Test API
           </button>
-        )}
+          <button
+            onClick={() => {
+              setUsername('admin');
+              setPassword('admin123');
+              setDebugInfo('Test credentials loaded\nUsername: admin\nPassword: admin123');
+            }}
+            style={{
+              flex: 1,
+              padding: '10px',
+              background: '#e8f4fd',
+              color: '#3498db',
+              border: '1px solid #b3e0ff',
+              borderRadius: '6px',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            🔧 Load Test Data
+          </button>
+        </div>
 
         <div style={{ 
           marginTop: '30px', 
@@ -420,13 +487,15 @@ const Login = () => {
             fontSize: '13px',
             margin: '5px 0'
           }}>
-            Demo: admin / admin123 • bonte / bonte123
+            Demo Credentials: admin / admin123 • bonte / bonte123
           </p>
           <p style={{ 
             color: '#bdc3c7', 
             fontSize: '12px',
             margin: '5px 0'
           }}>
+            Frontend: https://regal-pharma-frontend.onrender.com<br />
+            Backend: https://regal-pharma-backend.onrender.com<br />
             v1.0.0 • © {new Date().getFullYear()} Regal Pharma
           </p>
         </div>
