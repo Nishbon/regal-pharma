@@ -50,14 +50,18 @@ const Login = () => {
         // Update auth context
         login(userData);
         
-        // Redirect based on role
-        setTimeout(() => {
-          if (userData.role === 'supervisor' || userData.role === 'admin') {
-            window.location.href = '/supervisor-dashboard';
-          } else {
-            window.location.href = '/dashboard';
-          }
-        }, 100);
+        // Determine redirect path based on role
+        const redirectPath = userData.role === 'supervisor' || userData.role === 'admin' 
+          ? '/supervisor-dashboard' 
+          : '/dashboard';
+        
+        // Store redirect path in sessionStorage
+        sessionStorage.setItem('postLoginRedirect', redirectPath);
+        
+        console.log(`✅ Login successful! Redirecting to: ${redirectPath}`);
+        
+        // CRITICAL: Go to root first, then App.jsx will handle the redirect
+        window.location.href = '/';
         
       } else {
         setError(response.data.message || 'Login failed. Please check your credentials.');
