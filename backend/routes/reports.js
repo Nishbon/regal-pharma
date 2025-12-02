@@ -1,76 +1,312 @@
 const express = require('express');
 const DailyReport = require('../models/DailyReport');
-const User = require('../models/User'); // ADD THIS IMPORT
+const User = require('../models/User');
 const router = express.Router();
 
-// Get user's reports - FETCH REAL DATA
-router.get('/my-reports', async (req, res) => {
+// ====================== HELPER: Check Authentication ======================
+const requireAuth = (req, res, next) => {
+  if (!req.user || !req.user.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required. Please login first.'
+    });
+  }
+  next();
+};
+
+// ====================== HELPER: Check Supervisor Role ======================
+const requireSupervisor = (req, res, next) => {
+  if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Supervisor or admin role required.'
+    });
+  }
+  next();
+};
+
+// ====================== GET USER'S OWN REPORTS ======================
+router.get('/my-reports', requireAuth, async (req, res) => {
   try {
-    console.log(`📋 Fetching reports for: ${req.user.username}`);
+    console.log(`📋 Fetching reports for user ID: ${req.user.id}`);
     
-    // Since we don't have real user IDs in debug mode, fetch all reports or filter by username
-    let query = {};
-    
-    // If we have a username in the token, try to find user first
-    if (req.user.username && req.user.username !== 'guest') {
-      const user = await User.findOne({ username: req.user.username }).lean();
-      if (user) {
-        query.user_id = user._id;
-      }
-    }
-    
-    const reports = await DailyReport.find(query)
+    // Use REAL user ID from JWT token
+    const reports = await DailyReport.find({ user_id: req.user.id })
       .sort({ report_date: -1 })
       .limit(20)
       .lean();
     
-    console.log(`✅ Found ${reports.length} reports in database`);
+    console.log(`✅ Found ${reports.length} reports for user ${req.user.username}`);
     
     res.json({
       success: true,
       data: reports,
       count: reports.length,
-      user: req.user.username
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+        name: req.user.name
+      }
     });
   } catch (error) {
-    console.error('Error fetching reports:', error);
+    console.error('Error fetching user reports:', error);
     res.status(500).json({
       success: false,
-      message: 'Database error'
+      message: 'Error fetching reports',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// Get all reports (for supervisors)
-router.get('/all', async (req, res) => {
+// ====================== GET ALL REPORTS (SUPERVISORS ONLY) ======================
+router.get('/all', requireAuth, requireSupervisor, async (req, res) => {
   try {
+    console.log(`👨‍💼 Supervisor ${req.user.username} fetching all reports`);
+    
     const reports = await DailyReport.find({})
+      .populate('user_id', 'name username email region role')
+      .sort({ report_date: -1 })
+      .limit(100)
+      .lean();
+    
+    console.log(`📊 Found ${reports.length} total reports in database`);
+    
+    res.json({
+      success: true,
+      data: reports,
+      count: reports.length,
+      supervisor: req.user.username
+    });
+  } catch (error) {
+    console.error('Error fetching all reports:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching reports',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ====================== CREATE NEW REPORT ======================
+router.post('/create', requireAuth, async (req, res) => {
+  try {
+    const { date, doctor_name, hospital_name, products_promoted, samples_given, 
+            next_visit_date, challenges_faced, additional_notes } = req.body;
+    
+    console.log(`📝 User ${req.user.username} creating report for ${date}`);
+    
+    // Validate required fields
+    if (!date || !doctor_name || !hospital_name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date, doctor name, and hospital name are required'
+      });
+    }
+    
+    // Check if report already exists for this user on this date
+    const existingReport = await DailyReport.findOne({
+      user_id: req.user.id,
+      report_date: new Date(date)
+    });
+    
+    if (existingReport) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already submitted a report for this date'
+      });
+    }
+    
+    // Create new report
+    const newReport = new DailyReport({
+      user_id: req.user.id,
+      report_date: new Date(date),
+      doctor_name,
+      hospital_name,
+      products_promoted: products_promoted || [],
+      samples_given: samples_given || [],
+      next_visit_date: next_visit_date ? new Date(next_visit_date) : null,
+      challenges_faced: challenges_faced || '',
+      additional_notes: additional_notes || ''
+    });
+    
+    await newReport.save();
+    
+    console.log(`✅ Report created successfully for ${req.user.username}`);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Report submitted successfully',
+      data: newReport
+    });
+  } catch (error) {
+    console.error('Error creating report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error submitting report',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// ====================== GET REPORT BY ID ======================
+router.get('/:id', requireAuth, async (req, res) => {
+  try {
+    const report = await DailyReport.findById(req.params.id).lean();
+    
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found'
+      });
+    }
+    
+    // Check if user owns this report or is supervisor
+    if (report.user_id.toString() !== req.user.id && 
+        req.user.role !== 'supervisor' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view this report'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: report
+    });
+  } catch (error) {
+    console.error('Error fetching report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching report'
+    });
+  }
+});
+
+// ====================== UPDATE REPORT ======================
+router.put('/:id', requireAuth, async (req, res) => {
+  try {
+    const report = await DailyReport.findById(req.params.id);
+    
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found'
+      });
+    }
+    
+    // Check if user owns this report
+    if (report.user_id.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit your own reports'
+      });
+    }
+    
+    // Update report
+    const updatedData = req.body;
+    Object.assign(report, updatedData);
+    await report.save();
+    
+    res.json({
+      success: true,
+      message: 'Report updated successfully',
+      data: report
+    });
+  } catch (error) {
+    console.error('Error updating report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating report'
+    });
+  }
+});
+
+// ====================== DELETE REPORT ======================
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const report = await DailyReport.findById(req.params.id);
+    
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found'
+      });
+    }
+    
+    // Check if user owns this report or is supervisor
+    if (report.user_id.toString() !== req.user.id && 
+        req.user.role !== 'supervisor' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this report'
+      });
+    }
+    
+    await report.deleteOne();
+    
+    res.json({
+      success: true,
+      message: 'Report deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting report'
+    });
+  }
+});
+
+// ====================== GET REPORTS BY DATE RANGE ======================
+router.get('/date-range/:start/:end', requireAuth, async (req, res) => {
+  try {
+    const startDate = new Date(req.params.start);
+    const endDate = new Date(req.params.end);
+    
+    // Build query based on user role
+    let query = {
+      report_date: {
+        $gte: startDate,
+        $lte: endDate
+      }
+    };
+    
+    // Regular users only see their own reports
+    if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
+      query.user_id = req.user.id;
+    }
+    
+    const reports = await DailyReport.find(query)
       .populate('user_id', 'name username region')
       .sort({ report_date: -1 })
-      .limit(50)
       .lean();
     
     res.json({
       success: true,
       data: reports,
-      count: reports.length
+      count: reports.length,
+      dateRange: {
+        start: startDate.toISOString().split('T')[0],
+        end: endDate.toISOString().split('T')[0]
+      }
     });
   } catch (error) {
+    console.error('Error fetching reports by date:', error);
     res.status(500).json({
       success: false,
-      message: 'Database error'
+      message: 'Error fetching reports'
     });
   }
 });
 
-// Add more routes as needed
+// ====================== TEST ENDPOINT ======================
 router.get('/test', (req, res) => {
   res.json({
     success: true,
     message: 'Reports API is working',
+    authentication: req.user ? 'Authenticated' : 'Not authenticated',
     user: req.user
   });
 });
 
-// CRITICAL: Add this export statement
 module.exports = router;
