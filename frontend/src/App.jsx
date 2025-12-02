@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import MedRepDashboard from './components/MedRepDashboard';
@@ -47,14 +47,14 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
   if (!user) {
     console.log('🔒 ProtectedRoute: No user, redirecting to login');
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
 
   console.log('👤 ProtectedRoute - User role:', user.role);
   
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     console.log(`🚫 ProtectedRoute: Role ${user.role} not allowed, redirecting`);
-    return <Navigate to="/dashboard" />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;
@@ -102,105 +102,96 @@ const SupervisorDashboardRoute = () => {
   }
 };
 
-// Wrapper component to handle post-login redirects
-const AppContent = () => {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (user && !loading) {
-      // Check if we have a stored redirect path from login
-      const redirectPath = sessionStorage.getItem('postLoginRedirect');
-      
-      if (redirectPath) {
-        console.log('🔄 Found post-login redirect path:', redirectPath);
-        // Clear the stored path
-        sessionStorage.removeItem('postLoginRedirect');
-        // Navigate to the intended destination
-        navigate(redirectPath);
-      }
-    }
-  }, [user, loading, navigate]);
-
-  // Show loading while auth initializes
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Navigate to="/dashboard" />} />
-        
-        {/* MAIN DASHBOARD - Auto-detects role */}
-        <Route 
-          path="dashboard" 
-          element={
-            <ProtectedRoute>
-              <RoleBasedDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* SUPERVISOR DASHBOARD - Only for supervisors/admins */}
-        <Route 
-          path="supervisor-dashboard" 
-          element={
-            <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
-              <SupervisorDashboardRoute />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* DAILY REPORT - For all authenticated users */}
-        <Route 
-          path="daily-report" 
-          element={
-            <ProtectedRoute>
-              <DailyReport />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* REPORTS HISTORY - For all authenticated users */}
-        <Route 
-          path="reports" 
-          element={
-            <ProtectedRoute>
-              <ReportsHistory />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* ANALYTICS - Role-based */}
-        <Route 
-          path="analytics" 
-          element={
-            <ProtectedRoute>
-              <RoleBasedAnalytics />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* Add a 404 route */}
-        <Route path="*" element={
-          <div style={{ padding: '40px', textAlign: 'center' }}>
-            <h2>404 - Page Not Found</h2>
-            <p>The page you're looking for doesn't exist.</p>
-            <a href="/dashboard">Go to Dashboard</a>
-          </div>
-        } />
-      </Route>
-    </Routes>
-  );
-};
-
+// Main App Component
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <Routes>
+          {/* Login route should NOT be wrapped in Layout */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* All other routes are wrapped in Layout */}
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            
+            {/* MAIN DASHBOARD - Auto-detects role */}
+            <Route 
+              path="dashboard" 
+              element={
+                <ProtectedRoute>
+                  <RoleBasedDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* SUPERVISOR DASHBOARD - Only for supervisors/admins */}
+            <Route 
+              path="supervisor-dashboard" 
+              element={
+                <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
+                  <SupervisorDashboardRoute />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* DAILY REPORT - For all authenticated users */}
+            <Route 
+              path="daily-report" 
+              element={
+                <ProtectedRoute>
+                  <DailyReport />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* REPORTS HISTORY - For all authenticated users */}
+            <Route 
+              path="reports" 
+              element={
+                <ProtectedRoute>
+                  <ReportsHistory />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* ANALYTICS - Role-based */}
+            <Route 
+              path="analytics" 
+              element={
+                <ProtectedRoute>
+                  <RoleBasedAnalytics />
+                </ProtectedRoute>
+              } 
+            />
+          </Route>
+          
+          {/* 404 route - at root level */}
+          <Route path="*" element={
+            <div style={{ 
+              padding: '40px', 
+              textAlign: 'center',
+              height: '100vh',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              <h2>404 - Page Not Found</h2>
+              <p>The page you're looking for doesn't exist.</p>
+              <a href="/login" style={{ 
+                padding: '10px 20px', 
+                background: '#3498db', 
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '5px',
+                marginTop: '20px'
+              }}>
+                Go to Login
+              </a>
+            </div>
+          } />
+        </Routes>
       </AuthProvider>
     </Router>
   );
