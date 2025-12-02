@@ -51,10 +51,10 @@ router.post('/login', [
       });
     }
 
-    // Create JWT token - Use _id, not id
+    // Create JWT token - Use _id
     const token = jwt.sign(
       { 
-        _id: user._id.toString(),  // ← CHANGED FROM 'id' TO '_id'
+        _id: user._id.toString(),
         username: user.username, 
         role: user.role,
         name: user.name,
@@ -73,7 +73,7 @@ router.post('/login', [
       data: {
         token,
         user: {
-          id: user._id,  // You can still return as 'id' in response
+          id: user._id,
           username: user.username,
           name: user.name,
           email: user.email,
@@ -98,6 +98,18 @@ router.post('/logout', (req, res) => {
   res.json({ 
     success: true, 
     message: 'Logout successful' 
+  });
+});
+
+// ====================== TEST ENDPOINT ======================
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Auth API is working',
+    endpoints: [
+      'POST /login',
+      'POST /logout'
+    ]
   });
 });
 
