@@ -37,9 +37,9 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('combined'));
 }
 
-// CORS configuration
+// CORS configuration - ALLOW ALL
 app.use(cors({
-  origin: '*', // Allow all for testing
+  origin: '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
@@ -49,8 +49,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ====================== PUBLIC ROUTES (NO AUTH) ======================
-// Root endpoint
+// ====================== PUBLIC ROUTES ======================
 app.get('/', (req, res) => {
   res.json({
     success: true,
@@ -62,7 +61,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Health check endpoints
+// Health checks
 app.get('/health', (req, res) => {
   res.json({ 
     success: true, 
@@ -85,25 +84,14 @@ app.get('/api/test', (req, res) => {
   res.json({
     success: true,
     message: 'API is working!',
-    endpoints: [
-      'POST /api/auth/login',
-      'POST /api/auth/register',
-      'POST /api/auth/logout',
-      'GET  /api/test-auth (requires token)',
-      'GET  /api/reports/* (requires token)',
-      'GET  /api/analytics/* (requires token)',
-      'GET  /api/users/* (requires token)'
-    ],
     timestamp: new Date().toISOString()
   });
 });
 
-// ====================== AUTH ROUTES (NO AUTH REQUIRED) ======================
+// ====================== AUTH ROUTES (PUBLIC) ======================
 app.use('/api/auth', authRoutes);
 
-// ====================== PROTECTED ROUTES (REQUIRE AUTH) ======================
-console.log('\nLOADING PROTECTED ROUTES...');
-
+// ====================== PROTECTED ROUTES ======================
 // Test auth endpoint
 app.get('/api/test-auth', authenticateToken, (req, res) => {
   res.json({
@@ -118,43 +106,37 @@ app.get('/api/test-auth', authenticateToken, (req, res) => {
   });
 });
 
-// Apply auth middleware to protected routes
+// Protected routes
 app.use('/api/reports', authenticateToken, reportRoutes);
 app.use('/api/analytics', authenticateToken, analyticsRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
 
-console.log('✅ All routes loaded successfully\n');
-
 // ====================== ERROR HANDLING ======================
 // 404 handler
 app.use('*', (req, res) => {
-  const availableEndpoints = [
-    'GET  /',
-    'GET  /health',
-    'GET  /api/health',
-    'GET  /api/test',
-    'POST /api/auth/login',
-    'POST /api/auth/register',
-    'POST /api/auth/logout',
-    'GET  /api/test-auth (requires token)',
-    'GET  /api/reports/* (requires token)',
-    'GET  /api/analytics/* (requires token)',
-    'GET  /api/users/* (requires token)'
-  ];
-  
   res.status(404).json({ 
     success: false, 
     message: 'Route not found',
     requestedUrl: req.originalUrl,
     method: req.method,
-    availableEndpoints: availableEndpoints.filter(ep => !ep.includes('(requires token)'))
+    availableEndpoints: [
+      'GET  /',
+      'GET  /health',
+      'GET  /api/health',
+      'GET  /api/test',
+      'POST /api/auth/login',
+      'POST /api/auth/logout',
+      'GET  /api/test-auth',
+      'GET  /api/reports/*',
+      'GET  /api/analytics/*',
+      'GET  /api/users/*'
+    ]
   });
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
   console.error('Server error:', err.stack);
-  
   res.status(500).json({
     success: false,
     message: 'Internal server error',
@@ -169,12 +151,10 @@ app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔐 Authentication: JWT with MongoDB`);
-  console.log(`📊 MongoDB: ${process.env.MONGODB_URI ? 'Connected' : 'Not configured'}`);
   console.log('='.repeat(50));
-  console.log('\n📋 Test these endpoints:');
-  console.log('   GET  /api/test           - Test if API is working');
-  console.log('   POST /api/auth/login     - Login with admin/admin123');
-  console.log('   GET  /api/health         - Health check');
+  console.log('\n📋 Test endpoints:');
+  console.log('   GET  /api/test');
+  console.log('   POST /api/auth/login');
+  console.log('   GET  /api/health');
   console.log('\n✅ Server ready!');
 });
