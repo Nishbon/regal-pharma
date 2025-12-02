@@ -1,17 +1,23 @@
 import axios from 'axios';
 
-// Use your Render backend URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-                     'https://regal-pharma-backend.onrender.com';
+// Determine if we're in production
+const isProduction = import.meta.env.PROD;
 
-console.log('API Base URL:', API_BASE_URL); // Debug - remove in production
+// Use relative path in production (goes through Vite proxy)
+// Use direct URL in development
+const API_BASE_URL = isProduction 
+  ? '/api'  // Relative path for production (uses Vite proxy)
+  : (import.meta.env.VITE_API_URL || 'http://localhost:5000/api');
+
+console.log('Environment:', import.meta.env.MODE);
+console.log('API Base URL:', API_BASE_URL);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // Increased timeout for Render free tier (slow cold starts)
+  timeout: 30000, // Increased timeout for Render free tier
 });
 
 // Request interceptor to add auth token
@@ -22,15 +28,11 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // Add cache busting for development
+    // Log all requests in development
     if (import.meta.env.DEV) {
-      config.params = {
-        ...config.params,
-        _t: Date.now()
-      };
+      console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     }
     
-    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`); // Debug
     return config;
   },
   (error) => {
@@ -42,161 +44,144 @@ api.interceptors.request.use(
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response: ${response.status} ${response.config.url}`); // Debug
+    if (import.meta.env.DEV) {
+      console.log(`📥 Response ${response.status}: ${response.config.url}`);
+    }
     return response;
   },
   (error) => {
-    console.error('API Error:', {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      message: error.message,
-      response: error.response?.data
+    const url = error.config?.url;
+    const method = error.config?.method;
+    const status = error.response?.status;
+    const message = error.message;
+    
+    console.error('❌ API Error:', {
+      url: `${method?.toUpperCase()} ${url}`,
+      status,
+      message,
+      fullError: error.response?.data || error.message
     });
     
+    // Handle specific error cases
     if (error.code === 'ECONNABORTED') {
-      console.error('Request timeout - Render might be spinning up');
+      console.error('⏱️ Request timeout - Render might be spinning up');
     }
     
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
       // Only redirect if not already on login page
-      if (window.location.pathname !== '/login') {
+      if (!window.location.pathname.includes('/login')) {
+        console.log('🔒 Authentication failed, redirecting to login...');
         window.location.href = '/login';
       }
     }
     
-    // Handle network errors specifically
+    // Handle network errors
     if (!error.response) {
       if (error.message.includes('Network Error')) {
-        error.message = 'Cannot connect to server. The backend service might be starting up. Please wait 30 seconds and try again.';
+        error.message = 'Cannot connect to server. Please check your internet connection and try again.';
       }
+      console.error('🌐 Network error - Backend might be down:', error.message);
     }
     
-    return Promise.reject(error);
+    return Promise.reject({
+      ...error,
+      userMessage: error.response?.data?.message || error.message
+    });
   }
 );
 
+// ====================== API ENDPOINTS ======================
+
 export const authAPI = {
   login: (username, password) => 
-    api.post('/api/auth/login', { username, password }), // ✅ Fixed: Added /api/
+    api.post('/auth/login', { username, password }), // ✅ Removed /api/ prefix
   
   logout: () => 
-    api.post('/api/auth/logout'), // ✅ Fixed
+    api.post('/auth/logout'), // ✅ Removed /api/ prefix
   
   getProfile: () => 
-    api.get('/api/users/profile/me'), // ✅ Fixed: Changed endpoint
+    api.get('/users/profile/me'), // ✅ Removed /api/ prefix
   
-  // Debug endpoint (if exists)
-  debugLogin: (username, password) =>
-    api.post('/api/debug-login', { username, password }),
-  
-  // Health check endpoint
   healthCheck: () => 
-    api.get('/api/health', { timeout: 10000 }) // ✅ Fixed
+    api.get('/health', { timeout: 10000 }) // ✅ Removed /api/ prefix
 };
 
 export const reportsAPI = {
-  // Get user's own reports
   getMyReports: (page = 1, limit = 20) => 
-    api.get(`/api/reports/my-reports?page=${page}&limit=${limit}`), // ✅ Fixed
+    api.get(`/reports/my-reports?page=${page}&limit=${limit}`), // ✅ Removed /api/ prefix
   
-  // Get ALL reports (for supervisors)
   getAll: () => 
-    api.get('/api/reports/all'), // ✅ Fixed
+    api.get('/reports/all'), // ✅ Removed /api/ prefix
   
-  // Create new report
   create: (data) => 
-    api.post('/api/reports/create', data), // ✅ Fixed
+    api.post('/reports/create', data), // ✅ Removed /api/ prefix
   
-  // Get single report by ID
   getReport: (id) => 
-    api.get(`/api/reports/${id}`), // ✅ Fixed
+    api.get(`/reports/${id}`), // ✅ Removed /api/ prefix
   
-  // Update report
   updateReport: (id, data) => 
-    api.put(`/api/reports/${id}`, data), // ✅ Fixed
+    api.put(`/reports/${id}`, data), // ✅ Removed /api/ prefix
   
-  // Delete report
   deleteReport: (id) => 
-    api.delete(`/api/reports/${id}`), // ✅ Fixed
+    api.delete(`/reports/${id}`), // ✅ Removed /api/ prefix
   
-  // Get reports by date range
   getByDateRange: (startDate, endDate) => 
-    api.get(`/api/reports/date-range/${startDate}/${endDate}`), // ✅ Fixed
+    api.get(`/reports/date-range/${startDate}/${endDate}`), // ✅ Removed /api/ prefix
 };
 
 export const analyticsAPI = {
-  // Weekly stats for current user
   getWeekly: () => 
-    api.get('/api/analytics/weekly'), // ✅ Fixed
+    api.get('/analytics/weekly'), // ✅ Removed /api/ prefix
   
-  // Monthly stats for current user
   getMonthly: () => 
-    api.get('/api/analytics/monthly'), // ✅ Fixed
+    api.get('/analytics/monthly'), // ✅ Removed /api/ prefix
   
-  // Team performance (supervisors only)
   getTeamPerformance: (period = 'month') => 
-    api.get(`/api/analytics/team-performance?period=${period}`), // ✅ Fixed
+    api.get(`/analytics/team-performance?period=${period}`), // ✅ Removed /api/ prefix
   
-  // Region performance (supervisors only)
   getRegionPerformance: () => 
-    api.get('/api/analytics/region-performance'), // ✅ Fixed
+    api.get('/analytics/region-performance'), // ✅ Removed /api/ prefix
   
-  // Dashboard summary
   getDashboardSummary: () => 
-    api.get('/api/analytics/dashboard-summary'), // ✅ Fixed
-  
-  // Test endpoint
-  test: () => 
-    api.get('/api/analytics/test'), // ✅ Fixed
+    api.get('/analytics/dashboard-summary'), // ✅ Removed /api/ prefix
 };
 
 export const usersAPI = {
-  // Get all users (supervisors only)
   getAll: () => 
-    api.get('/api/users'), // ✅ Fixed
+    api.get('/users'), // ✅ Removed /api/ prefix
   
-  // Create user (supervisors only)
   create: (data) => 
-    api.post('/api/users', data), // ✅ Fixed
+    api.post('/users', data), // ✅ Removed /api/ prefix
   
-  // Update user (supervisors only)
   update: (id, data) => 
-    api.put(`/api/users/${id}`, data), // ✅ Fixed
+    api.put(`/users/${id}`, data), // ✅ Removed /api/ prefix
   
-  // Get user by ID (supervisors only)
   getById: (id) => 
-    api.get(`/api/users/${id}`), // ✅ Fixed
+    api.get(`/users/${id}`), // ✅ Removed /api/ prefix
   
-  // Get active medreps
   getActiveMedReps: () => 
-    api.get('/api/users/active-medreps'), // ✅ Fixed
+    api.get('/users/active-medreps'), // ✅ Removed /api/ prefix
   
-  // Get current user profile
   getProfile: () => 
-    api.get('/api/users/profile/me'), // ✅ Fixed
+    api.get('/users/profile/me'), // ✅ Removed /api/ prefix
   
-  // Update current user profile
   updateProfile: (data) => 
-    api.put('/api/users/profile/me', data), // ✅ Fixed
+    api.put('/users/profile/me', data), // ✅ Removed /api/ prefix
   
-  // Get supervisors
   getSupervisors: () => 
-    api.get('/api/users/supervisors'), // ✅ Fixed
-  
-  // Test auth
-  testAuth: () => 
-    api.get('/api/users/test/auth'), // ✅ Fixed
+    api.get('/users/supervisors'), // ✅ Removed /api/ prefix
 };
 
-// Test all API endpoints
+// Test API connection
 export const testAPIConnection = async () => {
   try {
     console.log('🧪 Testing API connection...');
     
     // Test 1: Health check
-    const health = await api.get('/api/health');
+    const health = await api.get('/health');
     console.log('✅ Health check:', health.data);
     
     // Test 2: Try to get profile (will fail if no token, but that's OK)
@@ -208,21 +193,6 @@ export const testAPIConnection = async () => {
       }
     } catch (profileError) {
       console.log('ℹ️ Profile check failed (no token or invalid):', profileError.message);
-    }
-    
-    // Test 3: Test endpoints that don't require auth
-    const testEndpoints = [
-      '/api/health',
-      '/api/test-auth'
-    ];
-    
-    for (const endpoint of testEndpoints) {
-      try {
-        const response = await api.get(endpoint);
-        console.log(`✅ ${endpoint}:`, response.status, response.data.message || 'OK');
-      } catch (error) {
-        console.log(`ℹ️ ${endpoint}:`, error.message);
-      }
     }
     
     return true;
@@ -240,7 +210,7 @@ export const initializeAPI = () => {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
   
-  // Test connection on startup
+  // Test connection on startup in development
   if (import.meta.env.DEV) {
     testAPIConnection().catch(() => {
       console.log('Backend might be starting up...');
