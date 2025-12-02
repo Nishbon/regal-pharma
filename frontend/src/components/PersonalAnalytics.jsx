@@ -8,6 +8,7 @@ const PersonalAnalytics = () => {
   const [timeRange, setTimeRange] = useState('week')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [allReportsLoaded, setAllReportsLoaded] = useState(false)
 
   useEffect(() => {
     loadAnalyticsData()
@@ -20,29 +21,89 @@ const PersonalAnalytics = () => {
       
       console.log('📊 Loading analytics data for time range:', timeRange)
       
-      // Get all reports (we'll filter by date on the frontend)
-      const response = await reportsAPI.getMyReports(1, 100) // Get up to 100 reports
-      console.log('📈 Analytics API response:', response.data)
+      // Try to get all reports for comprehensive analytics
+      let allReports = []
+      let page = 1
+      const limit = 50
       
-      if (response.data.success) {
-        // Handle different response structures
-        let reportsData = []
-        if (response.data.data?.reports) {
-          reportsData = response.data.data.reports
-        } else if (Array.isArray(response.data.data)) {
-          reportsData = response.data.data
-        } else {
-          reportsData = response.data.data?.data || []
+      // Load multiple pages if needed
+      while (!allReportsLoaded) {
+        try {
+          console.log(`📄 Loading page ${page} of reports...`)
+          const response = await reportsAPI.getMyReports(page, limit)
+          
+          if (response.data.success) {
+            // Handle different response structures
+            let pageReports = []
+            if (response.data.data?.reports && Array.isArray(response.data.data.reports)) {
+              pageReports = response.data.data.reports
+            } else if (Array.isArray(response.data.data)) {
+              pageReports = response.data.data
+            } else {
+              pageReports = response.data.data?.data || []
+            }
+            
+            console.log(`📋 Found ${pageReports.length} reports on page ${page}`)
+            
+            if (pageReports.length > 0) {
+              allReports = [...allReports, ...pageReports]
+              page++
+              
+              // Stop if we got less than the limit (no more pages)
+              if (pageReports.length < limit) {
+                console.log('🏁 All reports loaded')
+                setAllReportsLoaded(true)
+                break
+              }
+            } else {
+              console.log('🏁 No more reports to load')
+              setAllReportsLoaded(true)
+              break
+            }
+          } else {
+            console.warn('API returned unsuccessful on page', page)
+            break
+          }
+        } catch (pageError) {
+          console.error(`❌ Error loading page ${page}:`, pageError)
+          // Continue with what we have
+          break
         }
-        
-        console.log('📋 Found reports for analytics:', reportsData.length)
-        setReports(reportsData)
-      } else {
-        setError('Failed to load analytics data')
       }
+      
+      // Fallback: If we couldn't load all pages, just get first page
+      if (allReports.length === 0) {
+        console.log('🔄 Trying single page load as fallback...')
+        const fallbackResponse = await reportsAPI.getMyReports(1, 100)
+        
+        if (fallbackResponse.data.success) {
+          if (fallbackResponse.data.data?.reports && Array.isArray(fallbackResponse.data.data.reports)) {
+            allReports = fallbackResponse.data.data.reports
+          } else if (Array.isArray(fallbackResponse.data.data)) {
+            allReports = fallbackResponse.data.data
+          } else {
+            allReports = fallbackResponse.data.data?.data || []
+          }
+        }
+      }
+      
+      console.log('📊 Total reports for analytics:', allReports.length)
+      setReports(allReports)
+      
     } catch (error) {
       console.error('❌ Error loading analytics:', error)
-      setError(error.response?.data?.message || 'Failed to load analytics data')
+      console.error('Error details:', error.response?.data)
+      
+      let errorMessage = 'Failed to load analytics data'
+      if (error.response?.status === 401) {
+        errorMessage = 'Session expired. Please login again.'
+      } else if (error.response?.status === 404) {
+        errorMessage = 'Reports endpoint not found'
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+      
+      setError(errorMessage)
     }
     setLoading(false)
   }
@@ -64,7 +125,7 @@ const PersonalAnalytics = () => {
     
     return reports.filter(report => {
       try {
-        const reportDate = new Date(report.report_date || report.createdAt)
+        const reportDate = new Date(report.report_date || report.createdAt || report.updatedAt)
         return reportDate >= cutoffDate
       } catch {
         return false
@@ -120,7 +181,7 @@ const PersonalAnalytics = () => {
     // Group by day for weekly view
     const dailyData = filteredReports.reduce((groups, report) => {
       try {
-        const date = new Date(report.report_date).toISOString().split('T')[0]
+        const date = new Date(report.report_date || report.createdAt).toISOString().split('T')[0]
         
         const doctors = 
           (report.dentists || 0) +
@@ -134,6 +195,11 @@ const PersonalAnalytics = () => {
         if (!groups[date]) {
           groups[date] = {
             date,
+            displayDate: new Date(report.report_date || report.createdAt).toLocaleDateString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric'
+            }),
             total_doctors: 0,
             total_pharmacies: 0,
             total_dispensaries: 0,
@@ -157,7 +223,7 @@ const PersonalAnalytics = () => {
     // Group by month for monthly view
     const monthlyData = filteredReports.reduce((groups, report) => {
       try {
-        const date = new Date(report.report_date)
+        const date = new Date(report.report_date || report.createdAt)
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
         
@@ -173,6 +239,7 @@ const PersonalAnalytics = () => {
         if (!groups[monthKey]) {
           groups[monthKey] = {
             month: monthName,
+            monthKey,
             total_doctors: 0,
             total_pharmacies: 0,
             total_dispensaries: 0,
@@ -197,13 +264,22 @@ const PersonalAnalytics = () => {
 
     return {
       totals,
-      dailyData: Object.values(dailyData).sort((a, b) => new Date(b.date) - new Date(a.date)),
-      monthlyData: Object.values(monthlyData).sort((a, b) => b.month.localeCompare(a.month))
+      dailyData: Object.values(dailyData)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 14), // Last 14 days max
+      monthlyData: Object.values(monthlyData)
+        .sort((a, b) => b.monthKey.localeCompare(a.monthKey))
+        .slice(0, 6) // Last 6 months max
     }
   }
 
   const { totals, dailyData, monthlyData } = calculateAnalytics()
   const currentData = timeRange === 'week' ? dailyData : monthlyData
+
+  const refreshAnalytics = () => {
+    setAllReportsLoaded(false)
+    loadAnalyticsData()
+  }
 
   if (loading) {
     return (
@@ -250,33 +326,51 @@ const PersonalAnalytics = () => {
         boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
         position: 'relative'
       }}>
-        <button
-          onClick={loadAnalyticsData}
-          style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            background: 'rgba(255,255,255,0.2)',
-            color: 'white',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: '50px',
-            padding: '8px 16px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          🔄 Refresh
-        </button>
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          display: 'flex',
+          gap: '10px'
+        }}>
+          <button
+            onClick={refreshAnalytics}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '50px',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            🔄 Refresh
+          </button>
+        </div>
 
         <h1 style={{ margin: '0 0 10px 0', fontSize: '2.2em', fontWeight: '300' }}>
           My Performance Analytics 📈
         </h1>
         <p style={{ margin: '0', fontSize: '1.1em', opacity: '0.9' }}>
-          {user?.name || 'User'} • {user?.region || 'All Regions'} • {totals.reports} reports analyzed
+          {user?.name || 'User'} • {user?.region || 'All Regions'} • {reports.length} total reports
         </p>
+        
+        {/* Debug Info */}
+        <div style={{ 
+          marginTop: '15px', 
+          fontSize: '0.85em', 
+          opacity: '0.8',
+          background: 'rgba(255,255,255,0.1)',
+          padding: '6px 12px',
+          borderRadius: '6px',
+          display: 'inline-block'
+        }}>
+          📊 Showing: {filteredReports.length} reports in {timeRange === 'week' ? 'weekly' : timeRange === 'month' ? 'monthly' : '3-month'} view
+        </div>
       </div>
 
       {/* Error Message */}
@@ -289,7 +383,29 @@ const PersonalAnalytics = () => {
           marginBottom: '20px',
           border: '1px solid #f5c6cb'
         }}>
-          ⚠️ {error}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ fontSize: '1.2em' }}>⚠️</div>
+            <div style={{ flex: 1 }}>
+              <strong>Error:</strong> {error}
+            </div>
+          </div>
+          <div style={{ marginTop: '10px' }}>
+            <button 
+              onClick={refreshAnalytics}
+              style={{
+                padding: '6px 12px',
+                background: '#721c24',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       )}
 
@@ -319,10 +435,12 @@ const PersonalAnalytics = () => {
                 fontWeight: '500',
                 textTransform: 'capitalize',
                 fontSize: '1em',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                minWidth: '120px'
               }}
             >
-              {range === '3months' ? 'Last 3 Months' : `This ${range}`}
+              {range === '3months' ? 'Quarterly' : 
+               range === 'week' ? 'Weekly' : 'Monthly'}
             </button>
           ))}
         </div>
@@ -340,24 +458,28 @@ const PersonalAnalytics = () => {
           label="Total Doctors Visited"
           color="#3498db"
           icon="👨‍⚕️"
+          subtitle={`${totals.reports} reports`}
         />
         <StatCard 
           value={totals.pharmacies + totals.dispensaries} 
-          label="Pharmacies & Dispensaries"
+          label="Facilities Visited"
           color="#2ecc71"
           icon="💊"
+          subtitle={`${totals.pharmacies} pharmacies + ${totals.dispensaries} dispensaries`}
         />
         <StatCard 
           value={totals.orders} 
-          label="Total Orders Received"
+          label="Total Orders"
           color="#e74c3c"
           icon="📦"
+          subtitle={totals.reports > 0 ? `${(totals.orders / totals.reports).toFixed(1)} avg per report` : 'No orders'}
         />
         <StatCard 
           value={`RWF ${totals.value.toLocaleString()}`} 
-          label="Total Order Value"
+          label="Total Revenue"
           color="#f39c12"
           icon="💰"
+          subtitle={totals.orders > 0 ? `RWF ${Math.round(totals.value / totals.orders).toLocaleString()} avg per order` : 'No revenue'}
         />
       </div>
 
@@ -380,9 +502,9 @@ const PersonalAnalytics = () => {
             color: '#2c3e50',
             fontSize: '1.6em'
           }}>
-            {timeRange === 'week' ? '📅 Daily Performance' : 
-             timeRange === 'month' ? '📅 Monthly Performance' : 
-             '📅 Last 3 Months Performance'}
+            {timeRange === 'week' ? '📅 Daily Performance (Last 14 days)' : 
+             timeRange === 'month' ? '📅 Monthly Performance (Last 6 months)' : 
+             '📅 Quarterly Performance'}
           </h2>
           <div style={{ 
             fontSize: '0.9em', 
@@ -391,7 +513,7 @@ const PersonalAnalytics = () => {
             padding: '5px 15px',
             borderRadius: '20px'
           }}>
-            {currentData.length} {timeRange === 'week' ? 'days' : 'months'} of data
+            {currentData.length} {timeRange === 'week' ? 'days' : 'months'} shown
           </div>
         </div>
 
@@ -403,33 +525,49 @@ const PersonalAnalytics = () => {
           }}>
             <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>📊</div>
             <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>
-              No Data Available
+              No Data Available for Selected Period
             </h3>
-            <p style={{ margin: '0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto 20px' }}>
+            <p style={{ margin: '0', fontSize: '1.1em', maxWidth: '500px', margin: '0 auto 20px' }}>
               {reports.length === 0 
-                ? "You haven't submitted any reports yet. Start by submitting your first daily report!"
-                : `You have ${reports.length} total reports, but none in the selected time period.`
+                ? "You haven't submitted any reports yet. Start by submitting your first daily report to see your analytics!"
+                : `You have ${reports.length} total reports in the system, but none in the selected ${timeRange === 'week' ? 'week' : timeRange === 'month' ? 'month' : '3-month'} period.`
               }
             </p>
-            {reports.length === 0 && (
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              {reports.length === 0 && (
+                <button 
+                  onClick={() => window.location.href = '/daily-report'}
+                  style={{
+                    padding: '12px 30px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    fontSize: '1em',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                  }}
+                >
+                  Submit Your First Report
+                </button>
+              )}
               <button 
-                onClick={() => window.location.href = '/daily-report'}
+                onClick={() => setTimeRange('3months')}
                 style={{
-                  display: 'inline-block',
-                  padding: '12px 30px',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
+                  padding: '12px 25px',
+                  background: '#f8f9fa',
+                  color: '#667eea',
+                  border: '1px solid #667eea',
                   borderRadius: '25px',
                   fontSize: '1em',
                   fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
+                  cursor: 'pointer'
                 }}
               >
-                Submit Your First Report
+                View All Time Data
               </button>
-            )}
+            </div>
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -446,17 +584,17 @@ const PersonalAnalytics = () => {
                   <th style={{ padding: '15px', textAlign: 'left', fontWeight: '600', color: '#2c3e50' }}>
                     {timeRange === 'week' ? 'Date' : 'Month'}
                   </th>
-                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Doctors</th>
-                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Pharmacies</th>
-                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Dispensaries</th>
-                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>Orders</th>
-                  <th style={{ padding: '15px', textAlign: 'right', fontWeight: '600', color: '#2c3e50' }}>Value (RWF)</th>
+                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>👨‍⚕️ Doctors</th>
+                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>💊 Pharmacies</th>
+                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>🏥 Dispensaries</th>
+                  <th style={{ padding: '15px', textAlign: 'center', fontWeight: '600', color: '#2c3e50' }}>📦 Orders</th>
+                  <th style={{ padding: '15px', textAlign: 'right', fontWeight: '600', color: '#2c3e50' }}>💰 Revenue (RWF)</th>
                 </tr>
               </thead>
               <tbody>
                 {currentData.map((item, index) => (
                   <AnalyticsRow 
-                    key={item.date || item.month} 
+                    key={item.date || item.monthKey || index} 
                     item={item} 
                     index={index}
                     timeRange={timeRange}
@@ -511,17 +649,17 @@ const PersonalAnalytics = () => {
             gap: '15px',
             color: '#2d3436'
           }}>
-            <div style={{ padding: '10px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>📊 Average Daily Doctors:</strong> {Math.round(totals.doctors / Math.max(totals.reports, 1))}
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>📊 Average Daily/Monthly Doctors:</strong> {Math.round(totals.doctors / Math.max(currentData.length, 1))}
             </div>
-            <div style={{ padding: '10px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
               <strong>📈 Order Conversion Rate:</strong> {totals.doctors > 0 ? ((totals.orders / totals.doctors) * 100).toFixed(1) : 0}%
             </div>
-            <div style={{ padding: '10px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>💰 Average Order Value:</strong> RWF {Math.round(totals.value / Math.max(totals.orders, 1)).toLocaleString()}
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>💰 Average Order Value:</strong> RWF {totals.orders > 0 ? Math.round(totals.value / totals.orders).toLocaleString() : 0}
             </div>
-            <div style={{ padding: '10px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
-              <strong>📅 Activity Days:</strong> {totals.reports} days ({Math.round((totals.reports / (timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 90)) * 100)}% active)
+            <div style={{ padding: '12px', background: 'rgba(255,255,255,0.3)', borderRadius: '8px' }}>
+              <strong>📅 Active Days/Months:</strong> {totals.reports} reports ({Math.round((totals.reports / (timeRange === 'week' ? 7 : timeRange === 'month' ? 30 : 90)) * 100)}% active)
             </div>
           </div>
         </div>
@@ -534,10 +672,18 @@ const PersonalAnalytics = () => {
         borderRadius: '10px',
         fontSize: '0.9em',
         color: '#7f8c8d',
-        textAlign: 'center'
+        textAlign: 'center',
+        border: '1px solid #e9ecef'
       }}>
-        <strong>ℹ️ Data Source:</strong> Based on {reports.length} total reports from your account. 
-        Showing {currentData.length} {timeRange === 'week' ? 'daily' : 'monthly'} entries.
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '5px' }}>
+          <span>📊</span>
+          <strong>Data Source:</strong> 
+          <span>Based on {reports.length} total reports from your account.</span>
+        </div>
+        <div style={{ fontSize: '0.85em', opacity: '0.8' }}>
+          Showing {currentData.length} {timeRange === 'week' ? 'daily' : 'monthly'} entries • 
+          Last updated: {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+        </div>
       </div>
     </div>
   )
@@ -545,29 +691,14 @@ const PersonalAnalytics = () => {
 
 // Analytics Row Component
 const AnalyticsRow = ({ item, index, timeRange }) => {
-  const formatDate = (dateString) => {
-    try {
-      const date = new Date(dateString)
-      if (timeRange === 'week') {
-        return date.toLocaleDateString('en-US', { 
-          weekday: 'short',
-          month: 'short', 
-          day: 'numeric'
-        })
-      }
-      return item.month || date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    } catch {
-      return 'Invalid Date'
-    }
-  }
-
-  const dateLabel = timeRange === 'week' ? formatDate(item.date) : item.month
-
   return (
     <tr style={{ 
       borderBottom: '1px solid #e9ecef',
       background: index % 2 === 0 ? '#f8f9fa' : 'white',
-      transition: 'background-color 0.2s ease'
+      transition: 'background-color 0.2s ease',
+      ':hover': {
+        background: '#e9ecef'
+      }
     }}>
       <td style={{ 
         padding: '15px', 
@@ -575,7 +706,12 @@ const AnalyticsRow = ({ item, index, timeRange }) => {
         color: '#2c3e50',
         minWidth: '120px'
       }}>
-        {dateLabel}
+        {timeRange === 'week' ? item.displayDate || item.date : item.month}
+        {item.report_count > 0 && timeRange !== 'week' && (
+          <div style={{ fontSize: '0.8em', color: '#7f8c8d', marginTop: '3px' }}>
+            {item.report_count} report{item.report_count > 1 ? 's' : ''}
+          </div>
+        )}
       </td>
       <td style={{ 
         padding: '15px', 
@@ -627,8 +763,8 @@ const AnalyticsRow = ({ item, index, timeRange }) => {
   )
 }
 
-// Stat Card Component
-const StatCard = ({ value, label, color, icon }) => (
+// Enhanced Stat Card Component
+const StatCard = ({ value, label, color, icon, subtitle }) => (
   <div style={{
     background: 'white',
     padding: '20px',
@@ -647,11 +783,14 @@ const StatCard = ({ value, label, color, icon }) => (
       fontSize: '1.8em', 
       fontWeight: 'bold', 
       color: color,
-      marginBottom: '8px'
+      marginBottom: '5px'
     }}>
       {value}
     </div>
-    <div style={{ color: '#7f8c8d', fontSize: '0.9em' }}>{label}</div>
+    <div style={{ color: '#2c3e50', fontSize: '0.95em', fontWeight: '500', marginBottom: '5px' }}>{label}</div>
+    {subtitle && (
+      <div style={{ color: '#7f8c8d', fontSize: '0.8em', marginTop: '5px' }}>{subtitle}</div>
+    )}
   </div>
 )
 
