@@ -68,18 +68,33 @@ router.get('/all', requireSupervisor, async (req, res) => {
   try {
     console.log(`👨‍💼 Supervisor ${req.user.username} fetching all reports`);
     
-    const reports = await DailyReport.find({})
-      .populate('user_id', 'name username email region role')
-      .sort({ report_date: -1 })
-      .limit(100)
-      .lean();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+    
+    const [reports, total] = await Promise.all([
+      DailyReport.find({})
+        .populate('user_id', 'name username email region role')
+        .sort({ report_date: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      DailyReport.countDocuments({})
+    ]);
     
     console.log(`📊 Found ${reports.length} total reports in database`);
     
     res.json({
       success: true,
-      data: reports,
-      count: reports.length,
+      data: {
+        reports: reports,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        }
+      },
       supervisor: req.user.username
     });
   } catch (error) {
@@ -114,11 +129,41 @@ router.post('/create', async (req, res) => {
     console.log(`📝 User ${req.user.username} creating report`);
     console.log('Received data:', req.body);
     
+    // Get user region from user object if not provided
+    const userRegion = region || req.user?.region || 'Unknown Region';
+    
+    // Check if region is too long
+    if (userRegion.length > 50) {
+      return res.status(400).json({
+        success: false,
+        message: 'Region cannot exceed 50 characters'
+      });
+    }
+    
     // Check if report already exists for this user on this date
+    let reportDate;
     if (report_date) {
+      reportDate = new Date(report_date);
+      
+      // Check if date is valid
+      if (isNaN(reportDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid date format'
+        });
+      }
+      
+      // Check if date is in future
+      if (reportDate > new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Report date cannot be in the future'
+        });
+      }
+      
       const existingReport = await DailyReport.findOne({
         user_id: req.user.id,
-        report_date: new Date(report_date)
+        report_date: reportDate
       });
       
       if (existingReport) {
@@ -127,13 +172,15 @@ router.post('/create', async (req, res) => {
           message: 'You have already submitted a report for this date'
         });
       }
+    } else {
+      reportDate = new Date();
     }
     
     // Create new report with current model structure
     const newReport = new DailyReport({
       user_id: req.user.id,
-      report_date: report_date ? new Date(report_date) : new Date(),
-      region: region || user?.region || 'Unknown',
+      report_date: reportDate,
+      region: userRegion,
       dentists: parseInt(dentists) || 0,
       physiotherapists: parseInt(physiotherapists) || 0,
       gynecologists: parseInt(gynecologists) || 0,
@@ -156,7 +203,8 @@ router.post('/create', async (req, res) => {
       date: newReport.report_date,
       region: newReport.region,
       total_doctors: newReport.total_doctors,
-      orders: newReport.orders_count
+      orders: newReport.orders_count,
+      value: newReport.orders_value
     });
     
     res.status(201).json({
@@ -247,9 +295,38 @@ router.put('/:id', async (req, res) => {
       });
     }
     
-    // Update report
-    const updatedData = req.body;
-    Object.assign(report, updatedData);
+    // Update report - only allow certain fields to be updated
+    const {
+      region,
+      dentists,
+      physiotherapists,
+      gynecologists,
+      internists,
+      general_practitioners,
+      pediatricians,
+      dermatologists,
+      pharmacies,
+      dispensaries,
+      orders_count,
+      orders_value,
+      summary
+    } = req.body;
+    
+    // Only update fields that are provided
+    if (region !== undefined) report.region = region;
+    if (dentists !== undefined) report.dentists = parseInt(dentists) || 0;
+    if (physiotherapists !== undefined) report.physiotherapists = parseInt(physiotherapists) || 0;
+    if (gynecologists !== undefined) report.gynecologists = parseInt(gynecologists) || 0;
+    if (internists !== undefined) report.internists = parseInt(internists) || 0;
+    if (general_practitioners !== undefined) report.general_practitioners = parseInt(general_practitioners) || 0;
+    if (pediatricians !== undefined) report.pediatricians = parseInt(pediatricians) || 0;
+    if (dermatologists !== undefined) report.dermatologists = parseInt(dermatologists) || 0;
+    if (pharmacies !== undefined) report.pharmacies = parseInt(pharmacies) || 0;
+    if (dispensaries !== undefined) report.dispensaries = parseInt(dispensaries) || 0;
+    if (orders_count !== undefined) report.orders_count = parseInt(orders_count) || 0;
+    if (orders_value !== undefined) report.orders_value = parseInt(orders_value) || 0;
+    if (summary !== undefined) report.summary = summary;
+    
     await report.save();
     
     res.json({
@@ -307,6 +384,14 @@ router.get('/date-range/:start/:end', async (req, res) => {
   try {
     const startDate = new Date(req.params.start);
     const endDate = new Date(req.params.end);
+    
+    // Validate dates
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid date format'
+      });
+    }
     
     // Build query based on user role
     let query = {
