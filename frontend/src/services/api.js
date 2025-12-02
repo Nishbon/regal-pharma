@@ -1,16 +1,14 @@
 import axios from 'axios';
 
-// Determine if we're in production
-const isProduction = import.meta.env.PROD;
+// IMPORTANT: Vite automatically loads .env.production when building for production
+// In production: uses VITE_API_URL from .env.production (https://regal-pharma-backend.onrender.com/api)
+// In development: uses relative path /api (goes through Vite proxy)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
-// Use relative path in production (goes through Vite proxy)
-// Use direct URL in development
-const API_BASE_URL = isProduction 
-  ? '/api'  // Relative path for production (uses Vite proxy)
-  : (import.meta.env.VITE_API_URL || 'http://localhost:5000/api');
-
-console.log('Environment:', import.meta.env.MODE);
-console.log('API Base URL:', API_BASE_URL);
+console.log('⚡ Environment Mode:', import.meta.env.MODE);
+console.log('🏭 Is Production:', import.meta.env.PROD);
+console.log('🌐 API Base URL:', API_BASE_URL);
+console.log('🔧 VITE_API_URL:', import.meta.env.VITE_API_URL || 'Not set (using proxy)');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -28,15 +26,13 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
     
-    // Log all requests in development
-    if (import.meta.env.DEV) {
-      console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
-    }
+    // Log all requests
+    console.log(`📤 ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     
     return config;
   },
   (error) => {
-    console.error('Request interceptor error:', error);
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -44,9 +40,7 @@ api.interceptors.request.use(
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
   (response) => {
-    if (import.meta.env.DEV) {
-      console.log(`📥 Response ${response.status}: ${response.config.url}`);
-    }
+    console.log(`✅ Response ${response.status}: ${response.config.url}`);
     return response;
   },
   (error) => {
@@ -54,12 +48,16 @@ api.interceptors.response.use(
     const method = error.config?.method;
     const status = error.response?.status;
     const message = error.message;
+    const baseURL = error.config?.baseURL;
     
-    console.error('❌ API Error:', {
-      url: `${method?.toUpperCase()} ${url}`,
+    console.error('❌ API Error Details:', {
+      method: `${method?.toUpperCase()} ${url}`,
       status,
       message,
-      fullError: error.response?.data || error.message
+      baseURL,
+      fullURL: `${baseURL}${url}`,
+      responseData: error.response?.data,
+      isCorsError: message.includes('Network Error') && !error.response
     });
     
     // Handle specific error cases
@@ -78,17 +76,22 @@ api.interceptors.response.use(
       }
     }
     
-    // Handle network errors
+    // Handle network/CORS errors
     if (!error.response) {
       if (error.message.includes('Network Error')) {
-        error.message = 'Cannot connect to server. Please check your internet connection and try again.';
+        console.error('🌐 Network/CORS Error - Possible issues:');
+        console.error('  1. Backend is down');
+        console.error('  2. CORS not configured on backend');
+        console.error('  3. Wrong URL:', baseURL);
       }
-      console.error('🌐 Network error - Backend might be down:', error.message);
     }
     
     return Promise.reject({
       ...error,
-      userMessage: error.response?.data?.message || error.message
+      userMessage: error.response?.data?.message || 
+                  (error.message.includes('Network Error') 
+                    ? 'Cannot connect to server. Please check your internet connection.' 
+                    : error.message)
     });
   }
 );
@@ -97,108 +100,117 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (username, password) => 
-    api.post('/auth/login', { username, password }), // ✅ Removed /api/ prefix
+    api.post('/auth/login', { username, password }),
   
   logout: () => 
-    api.post('/auth/logout'), // ✅ Removed /api/ prefix
+    api.post('/auth/logout'),
   
   getProfile: () => 
-    api.get('/users/profile/me'), // ✅ Removed /api/ prefix
+    api.get('/users/profile/me'),
   
   healthCheck: () => 
-    api.get('/health', { timeout: 10000 }) // ✅ Removed /api/ prefix
+    api.get('/health', { timeout: 10000 }),
+  
+  // Debug endpoint
+  proxyTest: () =>
+    api.get('/proxy-test')
 };
 
 export const reportsAPI = {
   getMyReports: (page = 1, limit = 20) => 
-    api.get(`/reports/my-reports?page=${page}&limit=${limit}`), // ✅ Removed /api/ prefix
+    api.get(`/reports/my-reports?page=${page}&limit=${limit}`),
   
   getAll: () => 
-    api.get('/reports/all'), // ✅ Removed /api/ prefix
+    api.get('/reports/all'),
   
   create: (data) => 
-    api.post('/reports/create', data), // ✅ Removed /api/ prefix
+    api.post('/reports/create', data),
   
   getReport: (id) => 
-    api.get(`/reports/${id}`), // ✅ Removed /api/ prefix
+    api.get(`/reports/${id}`),
   
   updateReport: (id, data) => 
-    api.put(`/reports/${id}`, data), // ✅ Removed /api/ prefix
+    api.put(`/reports/${id}`, data),
   
   deleteReport: (id) => 
-    api.delete(`/reports/${id}`), // ✅ Removed /api/ prefix
+    api.delete(`/reports/${id}`),
   
   getByDateRange: (startDate, endDate) => 
-    api.get(`/reports/date-range/${startDate}/${endDate}`), // ✅ Removed /api/ prefix
+    api.get(`/reports/date-range/${startDate}/${endDate}`),
 };
 
 export const analyticsAPI = {
   getWeekly: () => 
-    api.get('/analytics/weekly'), // ✅ Removed /api/ prefix
+    api.get('/analytics/weekly'),
   
   getMonthly: () => 
-    api.get('/analytics/monthly'), // ✅ Removed /api/ prefix
+    api.get('/analytics/monthly'),
   
   getTeamPerformance: (period = 'month') => 
-    api.get(`/analytics/team-performance?period=${period}`), // ✅ Removed /api/ prefix
+    api.get(`/analytics/team-performance?period=${period}`),
   
   getRegionPerformance: () => 
-    api.get('/analytics/region-performance'), // ✅ Removed /api/ prefix
+    api.get('/analytics/region-performance'),
   
   getDashboardSummary: () => 
-    api.get('/analytics/dashboard-summary'), // ✅ Removed /api/ prefix
+    api.get('/analytics/dashboard-summary'),
 };
 
 export const usersAPI = {
   getAll: () => 
-    api.get('/users'), // ✅ Removed /api/ prefix
+    api.get('/users'),
   
   create: (data) => 
-    api.post('/users', data), // ✅ Removed /api/ prefix
+    api.post('/users', data),
   
   update: (id, data) => 
-    api.put(`/users/${id}`, data), // ✅ Removed /api/ prefix
+    api.put(`/users/${id}`, data),
   
   getById: (id) => 
-    api.get(`/users/${id}`), // ✅ Removed /api/ prefix
+    api.get(`/users/${id}`),
   
   getActiveMedReps: () => 
-    api.get('/users/active-medreps'), // ✅ Removed /api/ prefix
+    api.get('/users/active-medreps'),
   
   getProfile: () => 
-    api.get('/users/profile/me'), // ✅ Removed /api/ prefix
+    api.get('/users/profile/me'),
   
   updateProfile: (data) => 
-    api.put('/users/profile/me', data), // ✅ Removed /api/ prefix
+    api.put('/users/profile/me', data),
   
   getSupervisors: () => 
-    api.get('/users/supervisors'), // ✅ Removed /api/ prefix
+    api.get('/users/supervisors'),
 };
 
 // Test API connection
 export const testAPIConnection = async () => {
   try {
     console.log('🧪 Testing API connection...');
+    console.log('Current baseURL:', api.defaults.baseURL);
     
-    // Test 1: Health check
-    const health = await api.get('/health');
+    // Test health check
+    const health = await authAPI.healthCheck();
     console.log('✅ Health check:', health.data);
     
-    // Test 2: Try to get profile (will fail if no token, but that's OK)
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        const profile = await usersAPI.getProfile();
-        console.log('✅ Profile check:', profile.data);
-      }
-    } catch (profileError) {
-      console.log('ℹ️ Profile check failed (no token or invalid):', profileError.message);
-    }
+    // Test proxy test endpoint
+    const proxyTest = await authAPI.proxyTest();
+    console.log('✅ Proxy test:', proxyTest.data);
     
-    return true;
+    return {
+      success: true,
+      health: health.data,
+      proxy: proxyTest.data,
+      baseURL: api.defaults.baseURL
+    };
   } catch (error) {
     console.error('❌ API connection test failed:', error.message);
-    throw error;
+    console.error('Full error:', error);
+    
+    return {
+      success: false,
+      error: error.message,
+      baseURL: api.defaults.baseURL
+    };
   }
 };
 
@@ -210,12 +222,13 @@ export const initializeAPI = () => {
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   }
   
-  // Test connection on startup in development
-  if (import.meta.env.DEV) {
-    testAPIConnection().catch(() => {
-      console.log('Backend might be starting up...');
-    });
-  }
+  // Log initialization
+  console.log('🚀 API Service Initialized:', {
+    baseURL: api.defaults.baseURL,
+    mode: import.meta.env.MODE,
+    isProduction: import.meta.env.PROD,
+    hasToken: !!token
+  });
 };
 
 // Call initialization
