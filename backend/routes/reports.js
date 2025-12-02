@@ -77,48 +77,70 @@ router.get('/all', requireSupervisor, async (req, res) => {
 // ====================== CREATE NEW REPORT ======================
 router.post('/create', async (req, res) => {
   try {
-    const { date, doctor_name, hospital_name, products_promoted, samples_given, 
-            next_visit_date, challenges_faced, additional_notes } = req.body;
+    const {
+      report_date,
+      region,
+      dentists,
+      physiotherapists,
+      gynecologists,
+      internists,
+      general_practitioners,
+      pediatricians,
+      dermatologists,
+      pharmacies,
+      dispensaries,
+      orders_count,
+      orders_value,
+      summary
+    } = req.body;
     
-    console.log(`📝 User ${req.user.username} creating report for ${date}`);
-    
-    // Validate required fields
-    if (!date || !doctor_name || !hospital_name) {
-      return res.status(400).json({
-        success: false,
-        message: 'Date, doctor name, and hospital name are required'
-      });
-    }
+    console.log(`📝 User ${req.user.username} creating report`);
+    console.log('Received data:', req.body);
     
     // Check if report already exists for this user on this date
-    const existingReport = await DailyReport.findOne({
-      user_id: req.user.id,
-      report_date: new Date(date)
-    });
-    
-    if (existingReport) {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already submitted a report for this date'
+    if (report_date) {
+      const existingReport = await DailyReport.findOne({
+        user_id: req.user.id,
+        report_date: new Date(report_date)
       });
+      
+      if (existingReport) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already submitted a report for this date'
+        });
+      }
     }
     
-    // Create new report
+    // Create new report with current model structure
     const newReport = new DailyReport({
       user_id: req.user.id,
-      report_date: new Date(date),
-      doctor_name,
-      hospital_name,
-      products_promoted: products_promoted || [],
-      samples_given: samples_given || [],
-      next_visit_date: next_visit_date ? new Date(next_visit_date) : null,
-      challenges_faced: challenges_faced || '',
-      additional_notes: additional_notes || ''
+      report_date: report_date ? new Date(report_date) : new Date(),
+      region: region || user?.region || 'Unknown',
+      dentists: parseInt(dentists) || 0,
+      physiotherapists: parseInt(physiotherapists) || 0,
+      gynecologists: parseInt(gynecologists) || 0,
+      internists: parseInt(internists) || 0,
+      general_practitioners: parseInt(general_practitioners) || 0,
+      pediatricians: parseInt(pediatricians) || 0,
+      dermatologists: parseInt(dermatologists) || 0,
+      pharmacies: parseInt(pharmacies) || 0,
+      dispensaries: parseInt(dispensaries) || 0,
+      orders_count: parseInt(orders_count) || 0,
+      orders_value: parseInt(orders_value) || 0,
+      summary: summary || ''
     });
     
     await newReport.save();
     
     console.log(`✅ Report created successfully for ${req.user.username}`);
+    console.log('Report details:', {
+      user: req.user.username,
+      date: newReport.report_date,
+      region: newReport.region,
+      total_doctors: newReport.total_doctors,
+      orders: newReport.orders_count
+    });
     
     res.status(201).json({
       success: true,
@@ -127,9 +149,29 @@ router.post('/create', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating report:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: messages
+      });
+    }
+    
+    // Handle duplicate key error (unique constraint)
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already submitted a report for this date'
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Error submitting report'
+      message: 'Error submitting report',
+      error: error.message
     });
   }
 });
