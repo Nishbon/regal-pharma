@@ -46,13 +46,17 @@ api.interceptors.response.use(
   }
 );
 
-// API Endpoints
+// ====================== API ENDPOINTS ======================
+
 export const authAPI = {
   login: (username, password) => 
     api.post('/auth/login', { username, password }),
   
   logout: () => 
     api.post('/auth/logout'),
+  
+  getProfile: () => 
+    api.get('/users/profile/me'),
   
   healthCheck: () => 
     api.get('/health')
@@ -66,7 +70,63 @@ export const reportsAPI = {
     api.get('/reports/all'),
   
   create: (data) => 
-    api.post('/reports/create', data)
+    api.post('/reports/create', data),
+  
+  getReport: (id) => 
+    api.get(`/reports/${id}`),
+  
+  updateReport: (id, data) => 
+    api.put(`/reports/${id}`, data),
+  
+  deleteReport: (id) => 
+    api.delete(`/reports/${id}`),
+  
+  getByDateRange: (startDate, endDate) => 
+    api.get(`/reports/date-range/${startDate}/${endDate}`)
+};
+
+export const analyticsAPI = {
+  getWeekly: () => 
+    api.get('/analytics/weekly'),
+  
+  getMonthly: () => 
+    api.get('/analytics/monthly'),
+  
+  getTeamPerformance: (period = 'month') => 
+    api.get(`/analytics/team-performance?period=${period}`),
+  
+  getRegionPerformance: () => 
+    api.get('/analytics/region-performance'),
+  
+  getDashboardSummary: () => 
+    api.get('/analytics/dashboard-summary')
+};
+
+// ADD THIS - Missing export that's causing the build error
+export const usersAPI = {
+  getAll: () => 
+    api.get('/users'),
+  
+  create: (data) => 
+    api.post('/users', data),
+  
+  update: (id, data) => 
+    api.put(`/users/${id}`, data),
+  
+  getById: (id) => 
+    api.get(`/users/${id}`),
+  
+  getActiveMedReps: () => 
+    api.get('/users/active-medreps'),
+  
+  getProfile: () => 
+    api.get('/users/profile/me'),
+  
+  updateProfile: (data) => 
+    api.put('/users/profile/me', data),
+  
+  getSupervisors: () => 
+    api.get('/users/supervisors')
 };
 
 export default api;
