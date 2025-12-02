@@ -2,17 +2,24 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Detect environment
+const isProduction = process.env.NODE_ENV === 'production'
+const backendUrl = isProduction 
+  ? 'https://regal-pharma-backend.onrender.com'
+  : 'http://localhost:5000'
+
 export default defineConfig({
   plugins: [react()],
   base: '/',
   
   server: {
     port: 3000,
-    historyApiFallback: true, // ✅ Added here
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
-        changeOrigin: true
+        target: backendUrl,
+        changeOrigin: true,
+        secure: !isProduction, // false for local, true for production
+        rewrite: (path) => path
       }
     }
   },
