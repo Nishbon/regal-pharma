@@ -44,10 +44,10 @@ const DailyReport = () => {
     setLoading(true)
     setMessage('')
 
-    // Convert empty strings to 0 for numbers
+    // Prepare data exactly as the Mongoose model expects
     const submitData = {
       report_date: formData.report_date,
-      region: formData.region || user?.region || '',
+      region: formData.region || user?.region || 'Unknown',
       dentists: parseInt(formData.dentists) || 0,
       physiotherapists: parseInt(formData.physiotherapists) || 0,
       gynecologists: parseInt(formData.gynecologists) || 0,
@@ -63,7 +63,6 @@ const DailyReport = () => {
     }
 
     console.log('Submitting report:', submitData)
-    console.log('API Endpoint: /reports/create')
     console.log('User ID:', user?._id || user?.id)
 
     try {
@@ -111,6 +110,8 @@ const DailyReport = () => {
       }
     } catch (error) {
       console.error('Submit error:', error)
+      console.error('Error status:', error.response?.status)
+      console.error('Error data:', error.response?.data)
       
       let errorMessage = 'Failed to submit report. Please try again.'
       
@@ -118,6 +119,8 @@ const DailyReport = () => {
         errorMessage = error.response.data.message
       } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error
+      } else if (error.response?.data?.errors) {
+        errorMessage = error.response.data.errors.join(', ')
       } else if (error.message.includes('Network Error')) {
         errorMessage = 'Cannot connect to server. Please check your connection.'
       } else if (error.response?.status === 401) {
@@ -133,6 +136,8 @@ const DailyReport = () => {
     }
     setLoading(false)
   }
+
+  // ... rest of your component code remains the same
 
   const totalDoctors = (
     (parseInt(formData.dentists) || 0) +
