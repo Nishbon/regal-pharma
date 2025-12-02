@@ -101,17 +101,4 @@ router.post('/logout', (req, res) => {
   });
 });
 
-// ====================== TEST ENDPOINT ======================
-router.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Auth API is working',
-    endpoints: [
-      'POST /login',
-      'POST /logout'
-    ],
-    timestamp: new Date().toISOString()
-  });
-});
-
 module.exports = router;
