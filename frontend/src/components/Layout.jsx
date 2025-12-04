@@ -18,6 +18,7 @@ const Layout = () => {
     { path: '/reports', label: 'Reports', icon: '📋', roles: ['medrep', 'supervisor', 'admin'] },
     { path: '/analytics', label: 'Analytics', icon: '📊', roles: ['medrep', 'supervisor', 'admin'] },
     { path: '/supervisor-dashboard', label: 'Team Dashboard', icon: '👑', roles: ['supervisor', 'admin'] },
+    { path: '/team-management', label: 'Team Management', icon: '👥', roles: ['supervisor', 'admin'] }, // NEW ITEM
   ]
 
   // Filter navigation items based on user role
@@ -28,7 +29,8 @@ const Layout = () => {
   const isActive = (path) => {
     return location.pathname === path || 
            (path === '/dashboard' && location.pathname === '/') ||
-           (path === '/supervisor-dashboard' && location.pathname.startsWith('/supervisor'))
+           (path === '/supervisor-dashboard' && location.pathname.startsWith('/supervisor')) ||
+           (path === '/team-management' && location.pathname.startsWith('/team-management'))
   }
 
   return (
@@ -89,7 +91,7 @@ const Layout = () => {
                 fontWeight: '500'
               }}>
                 <span style={{ marginRight: '6px' }}>
-                  {user?.role === 'supervisor' ? '👑' : '👨‍⚕️'}
+                  {user?.role === 'supervisor' ? '👑' : user?.role === 'admin' ? '🔧' : '👨‍⚕️'}
                 </span>
                 {isMobile ? user?.name?.split(' ')[0] || 'User' : user?.name || 'User'}
                 <span style={{ 
@@ -211,7 +213,7 @@ const Layout = () => {
           </div>
 
           {/* Quick Stats (if on dashboard pages) */}
-          {['/dashboard', '/supervisor-dashboard'].includes(location.pathname) && (
+          {['/dashboard', '/supervisor-dashboard', '/team-management'].includes(location.pathname) && (
             <div style={{
               display: 'flex',
               gap: '20px',
@@ -227,6 +229,12 @@ const Layout = () => {
                 <span>📊</span>
                 <span>v1.0.0</span>
               </div>
+              {(user?.role === 'supervisor' || user?.role === 'admin') && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span>👥</span>
+                  <span>Team Management</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -270,6 +278,25 @@ const Layout = () => {
                 >
                   Daily Report
                 </button>
+                {/* Add Team Management link for supervisors/admins in footer */}
+                {(user?.role === 'supervisor' || user?.role === 'admin') && (
+                  <button 
+                    onClick={() => navigate('/team-management')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      textDecoration: 'none',
+                      ':hover': {
+                        color: '#2563eb',
+                        textDecoration: 'underline'
+                      }
+                    }}
+                  >
+                    Team Management
+                  </button>
+                )}
               </>
             )}
             <button 
