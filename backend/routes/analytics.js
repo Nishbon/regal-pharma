@@ -17,7 +17,7 @@ const requireSupervisor = (req, res, next) => {
 // ====================== GET WEEKLY STATS FOR USER ======================
 router.get('/weekly', async (req, res) => {
   try {
-    console.log(`📊 Weekly stats requested by user ID: ${req.user.id}`);
+    console.log(`📊 Weekly stats requested by user ID: ${req.user._id}`); // Changed to _id
     
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -25,7 +25,7 @@ router.get('/weekly', async (req, res) => {
     const weeklyStats = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id,
+          user_id: req.user._id, // Changed to _id
           report_date: { $gte: oneWeekAgo }
         }
       },
@@ -66,7 +66,7 @@ router.get('/weekly', async (req, res) => {
       success: true,
       data: weeklyStats,
       user: {
-        id: req.user.id,
+        id: req.user._id, // Changed to _id
         username: req.user.username,
         name: req.user.name
       }
@@ -83,12 +83,12 @@ router.get('/weekly', async (req, res) => {
 // ====================== GET MONTHLY STATS FOR USER ======================
 router.get('/monthly', async (req, res) => {
   try {
-    console.log(`📈 Monthly stats requested by user ID: ${req.user.id}`);
+    console.log(`📈 Monthly stats requested by user ID: ${req.user._id}`); // Changed to _id
     
     const monthlyStats = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id
+          user_id: req.user._id // Changed to _id
         }
       },
       {
@@ -142,7 +142,7 @@ router.get('/monthly', async (req, res) => {
       success: true,
       data: monthlyStats,
       user: {
-        id: req.user.id,
+        id: req.user._id, // Changed to _id
         username: req.user.username,
         name: req.user.name
       }
@@ -334,7 +334,7 @@ router.get('/dashboard-summary', async (req, res) => {
     
     // User's today stats
     const todayStats = await DailyReport.findOne({
-      user_id: req.user.id,
+      user_id: req.user._id, // Changed to _id
       report_date: { $gte: startOfDay }
     });
     
@@ -342,7 +342,7 @@ router.get('/dashboard-summary', async (req, res) => {
     const weeklyAgg = await DailyReport.aggregate([
       {
         $match: {
-          user_id: req.user.id,
+          user_id: req.user._id, // Changed to _id
           report_date: { $gte: startOfWeek }
         }
       },
@@ -431,7 +431,7 @@ router.get('/dashboard-summary', async (req, res) => {
         user: userStats,
         team: teamStats,
         user_info: {
-          id: req.user.id,
+          id: req.user._id, // Changed to _id
           username: req.user.username,
           name: req.user.name,
           role: req.user.role,
