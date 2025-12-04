@@ -92,179 +92,82 @@ const Login = () => {
   // Show loading while checking auth
   if (authLoading) {
     return (
-      <div style={{ 
-        minHeight: '100vh', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-      }}>
-        <div style={{
-          background: 'white',
-          padding: '40px',
-          borderRadius: '10px',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-          width: '100%',
-          maxWidth: '400px',
-          textAlign: 'center'
-        }}>
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            gap: '20px' 
-          }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              border: '4px solid #f3f3f3',
-              borderTop: '4px solid #3498db',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            <p style={{ color: '#666', margin: 0 }}>Checking authentication...</p>
+      <div className="login-loading">
+        <div className="loading-card">
+          <div className="loading-content">
+            <div className="loading-spinner"></div>
+            <p>Checking authentication...</p>
           </div>
-          <style>{`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}</style>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '40px',
-        borderRadius: '12px',
-        boxShadow: '0 15px 35px rgba(0,0,0,0.15)',
-        width: '100%',
-        maxWidth: '400px'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-          <div style={{
-            width: '80px',
-            height: '80px',
-            background: 'linear-gradient(135deg, #3498db 0%, #2c3e50 100%)',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 20px auto',
-            fontSize: '36px',
-            color: 'white'
-          }}>
-            💊
+    <div className="login-container">
+      <div className="login-card">
+        <div className="login-header">
+          <div className="logo-container">
+            <div className="logo-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
           </div>
-          <h1 style={{ 
-            color: '#2c3e50',
-            marginBottom: '8px',
-            fontSize: '28px'
-          }}>
-            Regal Pharma
-          </h1>
-          <p style={{ 
-            color: '#7f8c8d',
-            fontSize: '15px',
-            margin: 0
-          }}>
-            Medical Representative Portal
-          </p>
+          <h1>Regal Pharma</h1>
+          <p className="login-subtitle">Medical Representative Portal</p>
         </div>
 
         {error && (
-          <div style={{
-            background: '#ffebee',
-            color: '#c62828',
-            padding: '12px 16px',
-            borderRadius: '6px',
-            marginBottom: '24px',
-            border: '1px solid #ffcdd2',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            <span style={{ fontSize: '18px' }}>⚠️</span>
+          <div className="error-message">
+            <span className="error-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 8V12M12 16H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
             <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} onKeyPress={handleKeyPress}>
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: '600',
-              color: '#34495e',
-              fontSize: '14px'
-            }}>
+          <div className="form-group">
+            <label>
               Username
             </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              disabled={loading}
-              autoComplete="username"
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                fontSize: '15px',
-                boxSizing: 'border-box',
-                backgroundColor: loading ? '#f8f9fa' : 'white',
-                transition: 'border 0.3s',
-                outline: 'none'
-              }}
-              placeholder="Enter your username"
-              onFocus={(e) => e.target.style.borderColor = '#3498db'}
-              onBlur={(e) => e.target.style.borderColor = '#ddd'}
-            />
+            <div className="input-wrapper">
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+                disabled={loading}
+                autoComplete="username"
+                placeholder="Enter your username"
+              />
+              <span className="input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M12 11C14.2091 11 16 9.20914 16 7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7C8 9.20914 9.79086 11 12 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
+            </div>
           </div>
 
-          <div style={{ marginBottom: '30px' }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between',
-              marginBottom: '8px'
-            }}>
-              <label style={{ 
-                fontWeight: '600',
-                color: '#34495e',
-                fontSize: '14px'
-              }}>
-                Password
-              </label>
+          <div className="form-group">
+            <div className="label-row">
+              <label>Password</label>
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#3498db',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
+                className="show-password-btn"
               >
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            <div style={{ position: 'relative' }}>
+            <div className="input-wrapper">
               <input
                 type={showPassword ? "text" : "password"}
                 value={password}
@@ -272,67 +175,42 @@ const Login = () => {
                 required
                 disabled={loading}
                 autoComplete="current-password"
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  paddingRight: '50px',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  fontSize: '15px',
-                  boxSizing: 'border-box',
-                  backgroundColor: loading ? '#f8f9fa' : 'white',
-                  transition: 'border 0.3s',
-                  outline: 'none'
-                }}
                 placeholder="Enter your password"
-                onFocus={(e) => e.target.style.borderColor = '#3498db'}
-                onBlur={(e) => e.target.style.borderColor = '#ddd'}
               />
+              <span className="input-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M7 11V7C7 5.67392 7.52678 4.40215 8.46447 3.46447C9.40215 2.52678 10.6739 2 12 2C13.3261 2 14.5979 2.52678 15.5355 3.46447C16.4732 4.40215 17 5.67392 17 7V11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </span>
             </div>
           </div>
 
           <button 
             type="submit" 
             disabled={loading}
-            style={{
-              width: '100%',
-              padding: '16px',
-              background: loading ? '#95a5a6' : '#3498db',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '16px',
-              fontWeight: '600',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.3s',
-              boxSizing: 'border-box'
-            }}
-            onMouseOver={(e) => {
-              if (!loading) {
-                e.target.style.background = '#2980b9';
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!loading) {
-                e.target.style.background = '#3498db';
-              }
-            }}
+            className="login-button"
           >
-            {loading ? 'Signing In...' : 'Sign In'}
+            {loading ? (
+              <>
+                <span className="button-spinner"></span>
+                Signing In...
+              </>
+            ) : (
+              <>
+                <span className="button-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </span>
+                Sign In
+              </>
+            )}
           </button>
         </form>
 
-        <div style={{ 
-          marginTop: '30px', 
-          paddingTop: '20px', 
-          borderTop: '1px solid #ecf0f1',
-          textAlign: 'center'
-        }}>
-          <p style={{ 
-            color: '#bdc3c7', 
-            fontSize: '12px',
-            margin: '5px 0'
-          }}>
+        <div className="login-footer">
+          <p>
             © {new Date().getFullYear()} Regal Pharma. All rights reserved.
           </p>
         </div>
@@ -340,5 +218,322 @@ const Login = () => {
     </div>
   );
 };
+
+// CSS Styles
+const styles = `
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.login-card {
+  background: #ffffff;
+  padding: 48px 40px;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+/* Loading State */
+.login-loading {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 20px;
+}
+
+.loading-card {
+  background: white;
+  padding: 60px 40px;
+  border-radius: 16px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #f1f5f9;
+  border-top: 3px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-content p {
+  color: #64748b;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Login Header */
+.login-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.logo-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.logo-icon {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
+
+.login-header h1 {
+  color: #1e293b;
+  margin-bottom: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-subtitle {
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 400;
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+/* Error Message */
+.error-message {
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 16px;
+  border-radius: 10px;
+  margin-bottom: 24px;
+  border: 1px solid #fecaca;
+  font-size: 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #475569;
+  font-size: 14px;
+}
+
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.show-password-btn {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.show-password-btn:hover {
+  color: #2563eb;
+}
+
+/* Input Wrapper */
+.input-wrapper {
+  position: relative;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding: 16px 48px 16px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 15px;
+  font-family: inherit;
+  background: #f8fafc;
+  transition: all 0.3s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input-wrapper input:focus {
+  border-color: #3b82f6;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input-wrapper input:disabled {
+  background: #f1f5f9;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.input-wrapper input::placeholder {
+  color: #94a3b8;
+}
+
+.input-icon {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Login Button */
+.login-button {
+  width: 100%;
+  padding: 18px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.25);
+}
+
+.login-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+}
+
+.login-button:disabled {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.button-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+.button-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Footer */
+.login-footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #f1f5f9;
+  text-align: center;
+}
+
+.login-footer p {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 400;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .login-card {
+    padding: 32px 24px;
+    border-radius: 16px;
+  }
+  
+  .logo-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+  }
+  
+  .login-header h1 {
+    font-size: 24px;
+  }
+  
+  .login-button {
+    padding: 16px;
+  }
+}
+`
+
+// Add styles to document
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style')
+  styleSheet.textContent = styles
+  document.head.appendChild(styleSheet)
+}
 
 export default Login;
