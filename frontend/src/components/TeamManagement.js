@@ -12,13 +12,6 @@ const TeamManagement = () => {
   const [filter, setFilter] = useState('all') // all, active, inactive
   const [performanceData, setPerformanceData] = useState([])
 
-  // Emoji helper component
-  const Emoji = ({ symbol, label }) => (
-    <span role="img" aria-label={label}>
-      {symbol}
-    </span>
-  )
-
   // Load team members
   const loadTeamMembers = async () => {
     try {
@@ -332,7 +325,7 @@ const TeamManagement = () => {
         textAlign: 'center'
       }}>
         <div style={{ fontSize: '6em', color: '#e74c3c' }}>
-          <span role="img" aria-label="lock">🔒</span>
+          {"\uD83D\uDD12"}
         </div>
         <h2 style={{ color: '#2c3e50', margin: '0' }}>Access Denied</h2>
         <p style={{ color: '#7f8c8d', fontSize: '1.1em' }}>
@@ -385,7 +378,7 @@ const TeamManagement = () => {
       }}>
         <div>
           <h1 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>
-            <span role="img" aria-label="team">👥</span> Team Management
+            {"\uD83D\uDC65"} Team Management
           </h1>
           <p style={{ margin: '0', color: '#7f8c8d' }}>
             Manage your medical representatives and track their performance
@@ -410,7 +403,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 12px rgba(46, 204, 113, 0.3)'
             }}
           >
-            <span role="img" aria-label="chart">📊</span> Export Team Report
+            {"\uD83D\uDCCA"} Export Team Report
           </button>
           
           <button
@@ -430,7 +423,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
             }}
           >
-            <span role="img" aria-label="add">➕</span> Add Team Member
+            {"\u2795"} Add Team Member
           </button>
         </div>
       </div>
@@ -563,7 +556,7 @@ const TeamManagement = () => {
                         {performance.stats.totalReports}
                       </div>
                       <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
-                        <span role="img" aria-label="reports">📋</span> Reports
+                        {"\uD83D\uDCCB"} Reports
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -571,7 +564,7 @@ const TeamManagement = () => {
                         {performance.stats.totalDoctors}
                       </div>
                       <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
-                        <span role="img" aria-label="doctors">👨‍⚕️</span> Doctors
+                        {"\uD83D\uDC68\u200D\u2695\uFE0F"} Doctors
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -579,7 +572,7 @@ const TeamManagement = () => {
                         {performance.stats.totalOrders}
                       </div>
                       <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
-                        <span role="img" aria-label="orders">📦</span> Orders
+                        {"\uD83D\uDCE6"} Orders
                       </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
@@ -587,7 +580,7 @@ const TeamManagement = () => {
                         RWF {(performance.stats.totalValue / 1000).toFixed(0)}K
                       </div>
                       <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
-                        <span role="img" aria-label="value">💰</span> Value
+                        {"\uD83D\uDCB0"} Value
                       </div>
                     </div>
                   </div>
@@ -605,7 +598,7 @@ const TeamManagement = () => {
                   marginBottom: '20px'
                 }}>
                   <div style={{ fontSize: '32px', marginBottom: '10px', opacity: '0.5' }}>
-                    <span role="img" aria-label="no data">📊</span>
+                    {"\uD83D\uDCCA"}
                   </div>
                   <div style={{ color: '#7f8c8d', fontSize: '14px' }}>No activity data available</div>
                 </div>
@@ -630,7 +623,7 @@ const TeamManagement = () => {
                     gap: '8px'
                   }}
                 >
-                  <span role="img" aria-label="export">📄</span> Export Report
+                  {"\uD83D\uDCC4"} Export Report
                 </button>
                 
                 <button
@@ -650,11 +643,11 @@ const TeamManagement = () => {
                 >
                   {member.is_active === false ? (
                     <>
-                      <span role="img" aria-label="activate">✅</span> Activate
+                      {"\u2705"} Activate
                     </>
                   ) : (
                     <>
-                      <span role="img" aria-label="deactivate">⛔</span> Deactivate
+                      {"\u26D4"} Deactivate
                     </>
                   )}
                 </button>
@@ -673,7 +666,7 @@ const TeamManagement = () => {
           boxShadow: '0 5px 20px rgba(0,0,0,0.08)'
         }}>
           <h3 style={{ margin: '0 0 25px 0', color: '#2c3e50' }}>
-            <span role="img" aria-label="performance">📈</span> Team Performance Summary
+            {"\uD83D\uDCC8"} Team Performance Summary
           </h3>
           
           <div style={{
@@ -684,25 +677,25 @@ const TeamManagement = () => {
             <SummaryCard
               title="Total Reports"
               value={performanceData.reduce((sum, p) => sum + p.stats.totalReports, 0)}
-              icon="📋"
+              icon="\uD83D\uDCCB"
               color="#667eea"
             />
             <SummaryCard
               title="Total Doctors Visited"
               value={performanceData.reduce((sum, p) => sum + p.stats.totalDoctors, 0)}
-              icon="👨‍⚕️"
+              icon="\uD83D\uDC68\u200D\u2695\uFE0F"
               color="#3498db"
             />
             <SummaryCard
               title="Total Orders"
               value={performanceData.reduce((sum, p) => sum + p.stats.totalOrders, 0)}
-              icon="📦"
+              icon="\uD83D\uDCE6"
               color="#9b59b6"
             />
             <SummaryCard
               title="Total Value"
               value={`RWF ${performanceData.reduce((sum, p) => sum + p.stats.totalValue, 0).toLocaleString()}`}
-              icon="💰"
+              icon="\uD83D\uDCB0"
               color="#f39c12"
             />
           </div>
@@ -719,7 +712,7 @@ const TeamManagement = () => {
           boxShadow: '0 5px 20px rgba(0,0,0,0.08)'
         }}>
           <div style={{ fontSize: '5em', marginBottom: '20px', opacity: '0.5' }}>
-            <span role="img" aria-label="team">👥</span>
+            {"\uD83D\uDC65"}
           </div>
           <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Team Members Found</h3>
           <p style={{ margin: '0 0 30px 0', color: '#7f8c8d', fontSize: '1.1em', maxWidth: '500px', margin: '0 auto 30px' }}>
@@ -739,7 +732,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
             }}
           >
-            <span role="img" aria-label="add">➕</span> Add Your First Team Member
+            {"\u2795"} Add Your First Team Member
           </button>
         </div>
       )}
@@ -758,7 +751,7 @@ const SummaryCard = ({ title, value, icon, color }) => {
       textAlign: 'center'
     }}>
       <div style={{ fontSize: '2.5em', marginBottom: '15px' }}>
-        <span role="img" aria-label={title.toLowerCase()}>{icon}</span>
+        {icon}
       </div>
       <div style={{ 
         fontSize: '2.2em', 
