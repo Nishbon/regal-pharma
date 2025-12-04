@@ -23,34 +23,27 @@ const ReportsHistory = () => {
       setError('')
       console.log('📋 Loading reports page:', currentPage)
       
-      // Use the updated API with pagination
       const response = await reportsAPI.getMyReports(currentPage, reportsPerPage)
       console.log('📊 Full API response:', response)
       
       if (response.data.success) {
-        // NEW: Better handling of API response structure
         let reportsData = []
         let totalCount = 0
         let pages = 1
         
-        // Check for different response structures
         if (response.data.data?.reports && Array.isArray(response.data.data.reports)) {
-          // Structure 1: { data: { reports: [], pagination: {} } }
           reportsData = response.data.data.reports
           totalCount = response.data.data.pagination?.total || reportsData.length
           pages = response.data.data.pagination?.pages || Math.ceil(totalCount / reportsPerPage)
         } else if (Array.isArray(response.data.data)) {
-          // Structure 2: { data: [] }
           reportsData = response.data.data
           totalCount = reportsData.length
           pages = 1
         } else if (response.data.data?.data && Array.isArray(response.data.data.data)) {
-          // Structure 3: { data: { data: [], total: X, pages: Y } }
           reportsData = response.data.data.data
           totalCount = response.data.data.total || reportsData.length
           pages = response.data.data.pages || Math.ceil(totalCount / reportsPerPage)
         } else if (response.data.data && typeof response.data.data === 'object') {
-          // Structure 4: Single report object
           reportsData = [response.data.data]
           totalCount = 1
           pages = 1
@@ -85,7 +78,6 @@ const ReportsHistory = () => {
     setLoading(false)
   }
 
-  // Add fallback loading if API fails
   const loadFallbackData = async () => {
     try {
       console.log('🔄 Trying fallback data loading...')
@@ -95,14 +87,12 @@ const ReportsHistory = () => {
         const allReports = allResponse.data.data || []
         console.log('📋 Total reports from getAll:', allReports.length)
         
-        // Filter for current user
         const userId = user?._id || user?.id
         const myReports = allReports.filter(report => {
           const reportUserId = report.user_id?._id || report.user_id || report.user
           return reportUserId === userId
         })
         
-        // Paginate manually
         const startIndex = (currentPage - 1) * reportsPerPage
         const endIndex = startIndex + reportsPerPage
         const paginatedReports = myReports.slice(startIndex, endIndex)
@@ -112,7 +102,7 @@ const ReportsHistory = () => {
         setReports(paginatedReports)
         setTotalReports(myReports.length)
         setTotalPages(Math.ceil(myReports.length / reportsPerPage))
-        setError('') // Clear any previous errors
+        setError('')
       }
     } catch (fallbackError) {
       console.error('❌ Fallback also failed:', fallbackError)
@@ -176,29 +166,9 @@ const ReportsHistory = () => {
 
   if (loading && reports.length === 0) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '80vh',
-        flexDirection: 'column',
-        gap: '20px'
-      }}>
-        <div style={{
-          width: '50px',
-          height: '50px',
-          border: '5px solid #f3f3f3',
-          borderTop: '5px solid #667eea',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }}></div>
-        <div style={{ color: '#667eea', fontSize: '18px' }}>Loading your reports...</div>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
+      <div className="reports-loading">
+        <div className="loading-spinner"></div>
+        <div className="loading-text">Loading your reports...</div>
       </div>
     )
   }
@@ -206,95 +176,57 @@ const ReportsHistory = () => {
   const stats = getTotalStats()
 
   return (
-    <div style={{ padding: '20px 0', minHeight: '100vh', background: '#f8f9fa' }}>
+    <div className="reports-container">
       {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white',
-        padding: '30px',
-        borderRadius: '15px',
-        marginBottom: '30px',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-        position: 'relative'
-      }}>
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          display: 'flex',
-          gap: '10px'
-        }}>
-          <button
-            onClick={refreshReports}
-            style={{
-              background: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: '50px',
-              padding: '8px 16px',
-              cursor: 'pointer',
-              fontSize: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            🔄 Refresh
-          </button>
+      <div className="reports-header">
+        <div className="header-content">
+          <div>
+            <h1>My Reports History</h1>
+            <p className="header-subtitle">
+              {reports.length > 0 ? `${totalReports} total reports • ${user?.region || 'All Regions'}` : 'No reports yet'}
+            </p>
+          </div>
+          <div className="header-actions">
+            <button
+              onClick={refreshReports}
+              className="refresh-button"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M23 4V10H17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M1 20V14H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3.51 9.00001C4.01717 7.5668 4.87913 6.2854 6.01547 5.27542C7.1518 4.26543 8.52547 3.55977 10.0083 3.22426C11.4911 2.88875 13.0348 2.93436 14.4952 3.35677C15.9556 3.77918 17.2853 4.56471 18.36 5.64001L23 10M1 14L5.64 18.36C6.71475 19.4353 8.04437 20.2208 9.50481 20.6432C10.9652 21.0656 12.5089 21.1113 13.9917 20.7757C15.4745 20.4402 16.8482 19.7346 17.9845 18.7246C19.1209 17.7146 19.9828 16.4332 20.49 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
         </div>
-
-        <h1 style={{ margin: '0 0 10px 0', fontSize: '2.2em', fontWeight: '300' }}>
-          My Reports History 📊
-        </h1>
-        <p style={{ margin: '0', fontSize: '1.1em', opacity: '0.9' }}>
-          {reports.length > 0 ? `${totalReports} total reports • ${user?.region || 'All Regions'}` : 'No reports yet'}
-        </p>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div style={{
-          background: '#f8d7da',
-          color: '#721c24',
-          padding: '15px 20px',
-          borderRadius: '10px',
-          marginBottom: '20px',
-          border: '1px solid #f5c6cb'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ fontSize: '1.2em' }}>⚠️</div>
-            <div style={{ flex: 1 }}>
-              <strong>Error:</strong> {error}
+        <div className="error-card">
+          <div className="error-content">
+            <div className="error-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 8V12M12 16H12.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="error-text">
+              <div className="error-title">Error</div>
+              <div>{error}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <div className="error-actions">
             <button 
               onClick={refreshReports}
-              style={{
-                padding: '6px 12px',
-                background: '#721c24',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
+              className="error-retry primary"
             >
               Retry
             </button>
             <button 
               onClick={retryWithFallback}
-              style={{
-                padding: '6px 12px',
-                background: '#856404',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                fontSize: '12px',
-                cursor: 'pointer',
-                fontWeight: '500'
-              }}
+              className="error-retry secondary"
             >
               Try Alternative Method
             </button>
@@ -304,80 +236,45 @@ const ReportsHistory = () => {
 
       {/* Statistics Summary */}
       {reports.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '15px',
-          marginBottom: '30px'
-        }}>
+        <div className="stats-grid">
           <StatCard 
             value={stats.totalDoctors} 
             label="Total Doctors Visited"
-            color="#3498db"
+            color="#3b82f6"
             icon="👨‍⚕️"
           />
           <StatCard 
             value={stats.totalPharmacies + stats.totalDispensaries} 
             label="Total Facilities Visited"
-            color="#2ecc71"
+            color="#10b981"
             icon="💊"
           />
           <StatCard 
             value={stats.totalOrders} 
             label="Total Orders Received"
-            color="#e74c3c"
+            color="#f59e0b"
             icon="📦"
           />
           <StatCard 
             value={`RWF ${stats.totalValue.toLocaleString()}`} 
             label="Total Order Value"
-            color="#f39c12"
+            color="#8b5cf6"
             icon="💰"
           />
         </div>
       )}
 
       {/* Reports Table */}
-      <div style={{
-        background: 'white',
-        padding: '30px',
-        borderRadius: '15px',
-        boxShadow: '0 5px 15px rgba(0,0,0,0.08)',
-        marginBottom: '30px'
-      }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          marginBottom: '25px'
-        }}>
-          <h2 style={{ margin: '0', color: '#2c3e50', fontSize: '1.5em' }}>
+      <div className="reports-card">
+        <div className="card-header">
+          <h2>
             {reports.length === 0 ? 'All Reports' : `Showing ${reports.length} ${reports.length === 1 ? 'report' : 'reports'}`}
             {totalReports > reports.length && ` (${totalReports} total)`}
           </h2>
-          <div style={{ 
-            fontSize: '0.9em', 
-            color: '#7f8c8d',
-            background: '#f8f9fa',
-            padding: '5px 15px',
-            borderRadius: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px'
-          }}>
+          <div className="page-info">
             <span>Page {currentPage} of {totalPages}</span>
             {totalReports > 0 && (
-              <span style={{ 
-                background: '#667eea',
-                color: 'white',
-                borderRadius: '50%',
-                width: '20px',
-                height: '20px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.8em'
-              }}>
+              <span className="total-badge">
                 {totalReports}
               </span>
             )}
@@ -385,135 +282,73 @@ const ReportsHistory = () => {
         </div>
 
         {reports.length === 0 ? (
-          <div style={{ 
-            textAlign: 'center', 
-            padding: '60px 20px',
-            color: '#7f8c8d'
-          }}>
-            <div style={{ fontSize: '4em', marginBottom: '20px', opacity: '0.5' }}>📝</div>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Reports Found</h3>
-            <p style={{ margin: '0 0 25px 0', fontSize: '1.1em', maxWidth: '400px', margin: '0 auto' }}>
+          <div className="empty-state">
+            <div className="empty-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 17H15M9 13H15M9 9H15M5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21Z" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3>No Reports Found</h3>
+            <p>
               {error ? 'There was an error loading your reports.' : 'You haven\'t submitted any daily reports yet.'}
             </p>
-            <button 
-              onClick={() => window.location.href = '/daily-report'}
-              style={{
-                display: 'inline-block',
-                padding: '12px 30px',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '25px',
-                fontSize: '1em',
-                fontWeight: '600',
-                cursor: 'pointer',
-                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
-                marginBottom: '15px'
-              }}
-            >
-              Submit Your First Report
-            </button>
-            <div style={{ fontSize: '0.9em', color: '#6c757d' }}>
-              Or try <button 
-                onClick={retryWithFallback}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#667eea',
-                  textDecoration: 'underline',
-                  cursor: 'pointer',
-                  padding: '0 4px',
-                  fontSize: '1em'
-                }}
+            <div className="empty-actions">
+              <button 
+                onClick={() => window.location.href = '/daily-report'}
+                className="primary-button"
               >
-                alternative loading method
+                Submit Your First Report
               </button>
+              <div className="alternative-link">
+                Or try{' '}
+                <button 
+                  onClick={retryWithFallback}
+                  className="link-button"
+                >
+                  alternative loading method
+                </button>
+              </div>
             </div>
           </div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e9ecef' }}>
-              <table style={{ 
-                width: '100%', 
-                borderCollapse: 'collapse',
-                fontSize: '0.95em'
-              }}>
+            <div className="table-wrapper">
+              <table className="reports-table">
                 <thead>
-                  <tr style={{ 
-                    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)'
-                  }}>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'left', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      Date
+                  <tr>
+                    <th>Date</th>
+                    <th>Region</th>
+                    <th>
+                      <div className="table-header-cell">
+                        <span className="table-icon">👨‍⚕️</span>
+                        <span>Doctors</span>
+                      </div>
                     </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'left', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      Region
+                    <th>
+                      <div className="table-header-cell">
+                        <span className="table-icon">💊</span>
+                        <span>Pharmacies</span>
+                      </div>
                     </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'center', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      👨‍⚕️ Doctors
+                    <th>
+                      <div className="table-header-cell">
+                        <span className="table-icon">🏥</span>
+                        <span>Dispensaries</span>
+                      </div>
                     </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'center', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      💊 Pharmacies
+                    <th>
+                      <div className="table-header-cell">
+                        <span className="table-icon">📦</span>
+                        <span>Orders</span>
+                      </div>
                     </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'center', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      🏥 Dispensaries
+                    <th>
+                      <div className="table-header-cell">
+                        <span className="table-icon">💰</span>
+                        <span>Value</span>
+                      </div>
                     </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'center', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      📦 Orders
-                    </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'right', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      💰 Value
-                    </th>
-                    <th style={{ 
-                      padding: '15px', 
-                      textAlign: 'center', 
-                      fontWeight: '600', 
-                      color: '#2c3e50',
-                      borderBottom: '2px solid #dee2e6'
-                    }}>
-                      Actions
-                    </th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -532,41 +367,19 @@ const ReportsHistory = () => {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                alignItems: 'center',
-                marginTop: '30px',
-                gap: '10px'
-              }}>
+              <div className="pagination">
                 <button
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
-                  style={{
-                    padding: '10px 20px',
-                    border: '1px solid #dee2e6',
-                    background: currentPage === 1 ? '#f8f9fa' : 'white',
-                    borderRadius: '8px',
-                    cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === 1 ? 0.6 : 1,
-                    fontWeight: '500',
-                    fontSize: '0.9em',
-                    transition: 'all 0.2s ease',
-                    ':hover': currentPage !== 1 ? {
-                      background: '#667eea',
-                      color: 'white',
-                      borderColor: '#667eea'
-                    } : {}
-                  }}
+                  className={`pagination-button previous ${currentPage === 1 ? 'disabled' : ''}`}
                 >
-                  ← Previous
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M15 18L9 12L15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  Previous
                 </button>
                 
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '5px',
-                  alignItems: 'center' 
-                }}>
+                <div className="page-numbers">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum
                     if (totalPages <= 5) {
@@ -585,22 +398,7 @@ const ReportsHistory = () => {
                       <button
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
-                        style={{
-                          padding: '8px 12px',
-                          border: '1px solid #dee2e6',
-                          background: currentPage === pageNum ? '#667eea' : 'white',
-                          color: currentPage === pageNum ? 'white' : '#6c757d',
-                          borderRadius: '5px',
-                          cursor: 'pointer',
-                          fontWeight: currentPage === pageNum ? '600' : '500',
-                          fontSize: '0.9em',
-                          minWidth: '36px',
-                          transition: 'all 0.2s ease',
-                          ':hover': currentPage !== pageNum ? {
-                            background: '#f8f9fa',
-                            borderColor: '#667eea'
-                          } : {}
-                        }}
+                        className={`page-number ${currentPage === pageNum ? 'active' : ''}`}
                       >
                         {pageNum}
                       </button>
@@ -611,24 +409,12 @@ const ReportsHistory = () => {
                 <button
                   onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
-                  style={{
-                    padding: '10px 20px',
-                    border: '1px solid #dee2e6',
-                    background: currentPage === totalPages ? '#f8f9fa' : 'white',
-                    borderRadius: '8px',
-                    cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
-                    opacity: currentPage === totalPages ? 0.6 : 1,
-                    fontWeight: '500',
-                    fontSize: '0.9em',
-                    transition: 'all 0.2s ease',
-                    ':hover': currentPage !== totalPages ? {
-                      background: '#667eea',
-                      color: 'white',
-                      borderColor: '#667eea'
-                    } : {}
-                  }}
+                  className={`pagination-button next ${currentPage === totalPages ? 'disabled' : ''}`}
                 >
-                  Next →
+                  Next
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
               </div>
             )}
@@ -648,7 +434,7 @@ const ReportsHistory = () => {
   )
 }
 
-// Report Row Component (simplified)
+// Report Row Component
 const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors }) => {
   const totalDoctors = calculateTotalDoctors(report)
   
@@ -666,97 +452,32 @@ const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors }) => {
   }
 
   return (
-    <tr style={{ 
-      borderBottom: '1px solid #e9ecef',
-      background: index % 2 === 0 ? '#f8f9fa' : 'white',
-      transition: 'all 0.2s ease',
-      ':hover': {
-        background: '#e9ecef'
-      }
-    }}>
-      <td style={{ 
-        padding: '15px', 
-        fontWeight: '500', 
-        color: '#2c3e50',
-        whiteSpace: 'nowrap'
-      }}>
-        {formatDate(report.report_date || report.createdAt)}
+    <tr className={`report-row ${index % 2 === 0 ? 'even' : 'odd'}`}>
+      <td className="row-date">
+        <div className="date-text">{formatDate(report.report_date || report.createdAt)}</div>
       </td>
-      <td style={{ 
-        padding: '15px', 
-        color: '#6c757d',
-        maxWidth: '150px',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }}>
+      <td className="row-region">
         {report.region || 'N/A'}
       </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'center', 
-        color: '#3498db', 
-        fontWeight: '600'
-      }}>
-        {totalDoctors}
+      <td className="row-doctors">{totalDoctors}</td>
+      <td className="row-pharmacies">{report.pharmacies || 0}</td>
+      <td className="row-dispensaries">{report.dispensaries || 0}</td>
+      <td className="row-orders">{report.orders_count || 0}</td>
+      <td className="row-value">
+        <div className="value-content">
+          <span className="currency">RWF</span>
+          <span className="amount">{(report.orders_value || 0).toLocaleString()}</span>
+        </div>
       </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'center', 
-        color: '#2ecc71', 
-        fontWeight: '600'
-      }}>
-        {report.pharmacies || 0}
-      </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'center', 
-        color: '#27ae60', 
-        fontWeight: '600'
-      }}>
-        {report.dispensaries || 0}
-      </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'center', 
-        color: '#e74c3c', 
-        fontWeight: '600'
-      }}>
-        {report.orders_count || 0}
-      </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'right', 
-        color: '#f39c12', 
-        fontWeight: '600',
-        whiteSpace: 'nowrap'
-      }}>
-        RWF {(report.orders_value || 0).toLocaleString()}
-      </td>
-      <td style={{ 
-        padding: '15px', 
-        textAlign: 'center',
-        whiteSpace: 'nowrap'
-      }}>
+      <td className="row-actions">
         <button
           onClick={() => onViewDetails(report)}
-          style={{
-            padding: '8px 16px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '0.85em',
-            fontWeight: '500',
-            transition: 'all 0.2s ease',
-            boxShadow: '0 2px 5px rgba(102, 126, 234, 0.3)',
-            ':hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: '0 4px 10px rgba(102, 126, 234, 0.4)'
-            }
-          }}
+          className="view-button"
         >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
           View Details
         </button>
       </td>
@@ -764,7 +485,7 @@ const ReportRow = ({ report, index, onViewDetails, calculateTotalDoctors }) => {
   )
 }
 
-// Report Details Modal Component (keep as is)
+// Report Details Modal Component
 const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
   const totalDoctors = calculateTotalDoctors(report)
   const totalVisits = totalDoctors + (report.pharmacies || 0) + (report.dispensaries || 0)
@@ -784,99 +505,42 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 1000,
-      padding: '20px'
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '30px',
-        borderRadius: '15px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        maxWidth: '700px',
-        width: '100%',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        position: 'relative'
-      }}>
-        {/* Close Button */}
+    <div className="report-modal">
+      <div className="modal-overlay" onClick={onClose}></div>
+      <div className="modal-content">
         <button
           onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '15px',
-            right: '15px',
-            background: '#f8f9fa',
-            border: 'none',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '1.2em',
-            color: '#6c757d',
-            transition: 'all 0.2s ease',
-            ':hover': {
-              background: '#e9ecef',
-              color: '#dc3545'
-            }
-          }}
+          className="modal-close"
         >
-          ✕
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
 
-        <div style={{ marginBottom: '25px' }}>
-          <h2 style={{ 
-            margin: '0 0 10px 0', 
-            color: '#2c3e50', 
-            fontSize: '1.6em' 
-          }}>
-            📋 Report Details
-          </h2>
-          <p style={{ margin: '0', color: '#6c757d', fontSize: '0.95em' }}>
+        <div className="modal-header">
+          <h2>Report Details</h2>
+          <p className="modal-subtitle">
             Submitted on {formatDate(report.report_date || report.createdAt)}
           </p>
         </div>
 
-        <div style={{ display: 'grid', gap: '25px' }}>
+        <div className="modal-body">
           {/* Quick Stats */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '15px',
-            padding: '20px',
-            background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-            borderRadius: '10px'
-          }}>
-            <StatItem label="Total Visits" value={totalVisits} icon="👣" color="#667eea" />
-            <StatItem label="Total Doctors" value={totalDoctors} icon="👨‍⚕️" color="#3498db" />
-            <StatItem label="Total Orders" value={report.orders_count || 0} icon="📦" color="#e74c3c" />
-            <StatItem label="Order Value" value={`RWF ${(report.orders_value || 0).toLocaleString()}`} icon="💰" color="#f39c12" />
+          <div className="quick-stats">
+            <StatItem label="Total Visits" value={totalVisits} icon="👣" color="#3b82f6" />
+            <StatItem label="Total Doctors" value={totalDoctors} icon="👨‍⚕️" color="#10b981" />
+            <StatItem label="Total Orders" value={report.orders_count || 0} icon="📦" color="#f59e0b" />
+            <StatItem label="Order Value" value={`RWF ${(report.orders_value || 0).toLocaleString()}`} icon="💰" color="#8b5cf6" />
           </div>
 
-          <DetailSection title="📅 Basic Information">
+          <DetailSection title="Basic Information">
             <DetailItem label="Report Date" value={formatDate(report.report_date)} />
             <DetailItem label="Region" value={report.region || 'Not specified'} />
             <DetailItem label="Submitted At" value={new Date(report.createdAt || report.submitted_at).toLocaleString()} />
           </DetailSection>
 
-          <DetailSection title="👨‍⚕️ Doctors Visited">
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', 
-              gap: '15px' 
-            }}>
+          <DetailSection title="Doctors Visited">
+            <div className="doctors-grid">
               <DetailItem label="🧑‍⚕️ Dentists" value={report.dentists || 0} />
               <DetailItem label="💪 Physiotherapists" value={report.physiotherapists || 0} />
               <DetailItem label="👩‍⚕️ Gynecologists" value={report.gynecologists || 0} />
@@ -887,28 +551,16 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
             </div>
           </DetailSection>
 
-          <DetailSection title="💊 Facilities Visited">
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', 
-              gap: '15px' 
-            }}>
+          <DetailSection title="Facilities Visited">
+            <div className="facilities-grid">
               <DetailItem label="🏥 Pharmacies" value={report.pharmacies || 0} />
               <DetailItem label="💊 Dispensaries" value={report.dispensaries || 0} />
             </div>
           </DetailSection>
 
           {report.summary && (
-            <DetailSection title="📝 Daily Summary">
-              <div style={{ 
-                background: '#f8f9fa', 
-                padding: '20px', 
-                borderRadius: '10px',
-                border: '1px solid #e9ecef',
-                lineHeight: '1.6',
-                color: '#495057',
-                fontSize: '0.95em'
-              }}>
+            <DetailSection title="Daily Summary">
+              <div className="summary-box">
                 {report.summary}
               </div>
             </DetailSection>
@@ -919,93 +571,912 @@ const ReportDetails = ({ report, onClose, calculateTotalDoctors }) => {
   )
 }
 
-// Reusable Components (keep as is)
+// Reusable Components
 const DetailSection = ({ title, children }) => (
-  <div>
-    <h3 style={{ 
-      margin: '0 0 15px 0', 
-      color: '#2c3e50', 
-      fontSize: '1.3em',
-      paddingBottom: '10px',
-      borderBottom: '2px solid #e9ecef'
-    }}>
-      {title}
-    </h3>
+  <div className="detail-section">
+    <h3>{title}</h3>
     {children}
   </div>
 )
 
 const DetailItem = ({ label, value }) => (
-  <div style={{ 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center',
-    padding: '8px 0',
-    borderBottom: '1px dashed #e9ecef'
-  }}>
-    <span style={{ color: '#6c757d', fontWeight: '500', fontSize: '0.95em' }}>{label}:</span>
-    <span style={{ 
-      color: '#2c3e50', 
-      fontWeight: '600',
-      fontSize: '1em'
-    }}>{value}</span>
+  <div className="detail-item">
+    <span className="detail-label">{label}:</span>
+    <span className="detail-value">{value}</span>
   </div>
 )
 
 const StatItem = ({ label, value, icon, color }) => (
-  <div style={{ 
-    textAlign: 'center',
-    padding: '15px',
-    background: 'white',
-    borderRadius: '8px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-  }}>
-    <div style={{ 
-      fontSize: '1.8em', 
-      marginBottom: '8px',
-      color: color
-    }}>{icon}</div>
-    <div style={{ 
-      fontSize: '1.4em', 
-      fontWeight: 'bold', 
-      color: color,
-      marginBottom: '5px'
-    }}>
-      {value}
+  <div className="stat-item-modal" style={{ borderColor: color }}>
+    <div className="stat-icon-modal" style={{ color: color }}>
+      {icon}
     </div>
-    <div style={{ 
-      color: '#6c757d', 
-      fontSize: '0.85em',
-      fontWeight: '500'
-    }}>{label}</div>
+    <div className="stat-content-modal">
+      <div className="stat-value-modal" style={{ color: color }}>{value}</div>
+      <div className="stat-label-modal">{label}</div>
+    </div>
   </div>
 )
 
 const StatCard = ({ value, label, color, icon }) => (
-  <div style={{
-    background: 'white',
-    padding: '20px',
-    borderRadius: '12px',
-    boxShadow: '0 3px 10px rgba(0,0,0,0.08)',
-    textAlign: 'center',
-    borderTop: `4px solid ${color}`,
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-    ':hover': {
-      transform: 'translateY(-5px)',
-      boxShadow: '0 5px 20px rgba(0,0,0,0.12)'
-    }
-  }}>
-    <div style={{ fontSize: '2.5em', marginBottom: '10px' }}>{icon}</div>
-    <div style={{ 
-      fontSize: '1.8em', 
-      fontWeight: 'bold', 
-      color: color,
-      marginBottom: '8px'
-    }}>
-      {value}
+  <div className="stat-card-reports" style={{ borderColor: color }}>
+    <div className="stat-icon" style={{ backgroundColor: `${color}15` }}>
+      {icon}
     </div>
-    <div style={{ color: '#7f8c8d', fontSize: '0.9em' }}>{label}</div>
+    <div className="stat-content">
+      <div className="stat-value" style={{ color: color }}>{value}</div>
+      <div className="stat-label">{label}</div>
+    </div>
   </div>
 )
+
+// CSS Styles
+const styles = `
+.reports-container {
+  padding: 30px;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Loading State */
+.reports-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 80vh;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reports-loading .loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #f1f5f9;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.reports-loading .loading-text {
+  color: #3b82f6;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Header */
+.reports-header {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  padding: 40px;
+  border-radius: 16px;
+  margin-bottom: 30px;
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.reports-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.header-subtitle {
+  margin: 0;
+  font-size: 16px;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.refresh-button {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.refresh-button:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.refresh-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Error Card */
+.error-card {
+  background: #fef2f2;
+  color: #991b1b;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 30px;
+  border: 1px solid #fecaca;
+}
+
+.error-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.error-text {
+  flex: 1;
+}
+
+.error-title {
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.error-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.error-retry {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.error-retry.primary {
+  background: #991b1b;
+  color: white;
+}
+
+.error-retry.primary:hover {
+  background: #7f1d1d;
+}
+
+.error-retry.secondary {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.error-retry.secondary:hover {
+  background: #fde68a;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card-reports {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  border-top: 3px solid;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: all 0.3s ease;
+  border: 1px solid #e2e8f0;
+}
+
+.stat-card-reports:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card-reports .stat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.stat-card-reports .stat-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-card-reports .stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.stat-card-reports .stat-label {
+  font-size: 14px;
+  color: #475569;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* Reports Card */
+.reports-card {
+  background: white;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+  border: 1px solid #e2e8f0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.card-header h2 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.page-info {
+  font-size: 14px;
+  color: #64748b;
+  background: #f8fafc;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.total-badge {
+  background: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #64748b;
+}
+
+.empty-icon {
+  margin-bottom: 20px;
+  opacity: 0.5;
+}
+
+.empty-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.empty-state h3 {
+  margin: 0 0 16px 0;
+  color: #475569;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.empty-state p {
+  margin: 0 auto 24px;
+  font-size: 15px;
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+.empty-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.primary-button {
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.25);
+  transition: all 0.3s ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.35);
+}
+
+.alternative-link {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.link-button:hover {
+  color: #1d4ed8;
+}
+
+/* Table */
+.table-wrapper {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.reports-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.reports-table thead {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.reports-table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+}
+
+.table-header-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-icon {
+  font-size: 16px;
+}
+
+.reports-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+}
+
+/* Table Rows */
+.report-row {
+  transition: background-color 0.2s ease;
+}
+
+.report-row:hover {
+  background: #f8fafc;
+}
+
+.report-row.even {
+  background: #ffffff;
+}
+
+.report-row.odd {
+  background: #f8fafc;
+}
+
+.row-date .date-text {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.row-region {
+  color: #64748b;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-doctors { color: #3b82f6; font-weight: 600; text-align: center; }
+.row-pharmacies { color: #10b981; font-weight: 600; text-align: center; }
+.row-dispensaries { color: #06b6d4; font-weight: 600; text-align: center; }
+.row-orders { color: #f59e0b; font-weight: 600; text-align: center; }
+
+.row-value .value-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.row-value .currency {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.row-value .amount {
+  color: #8b5cf6;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.row-actions {
+  text-align: center;
+}
+
+.view-button {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+}
+
+.view-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.view-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 30px;
+  gap: 12px;
+}
+
+.pagination-button {
+  padding: 10px 20px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+}
+
+.pagination-button:hover:not(.disabled) {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.pagination-button.disabled {
+  background: #f8fafc;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.page-number {
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  min-width: 36px;
+  transition: all 0.2s ease;
+}
+
+.page-number:hover:not(.active) {
+  background: #f8fafc;
+  border-color: #3b82f6;
+}
+
+.page-number.active {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  border-color: #3b82f6;
+}
+
+/* Report Modal */
+.report-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: white;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1001;
+  border: 1px solid #e2e8f0;
+}
+
+.modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: #f8fafc;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.modal-close svg {
+  width: 20px;
+  height: 20px;
+}
+
+.modal-header {
+  margin-bottom: 30px;
+}
+
+.modal-header h2 {
+  margin: 0 0 8px 0;
+  color: #1e293b;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.modal-subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 15px;
+}
+
+.modal-body {
+  display: grid;
+  gap: 30px;
+}
+
+/* Quick Stats in Modal */
+.quick-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.stat-item-modal {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  border-top: 3px solid;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.stat-icon-modal {
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.stat-value-modal {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.stat-label-modal {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Detail Sections in Modal */
+.detail-section {
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 24px;
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+}
+
+.detail-section h3 {
+  margin: 0 0 16px 0;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.doctors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.facilities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-label {
+  color: #64748b;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.detail-value {
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.summary-box {
+  background: #f8fafc;
+  padding: 20px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  line-height: 1.6;
+  color: #475569;
+  font-size: 15px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .doctors-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .reports-container {
+    padding: 16px;
+  }
+  
+  .reports-header {
+    padding: 24px;
+  }
+  
+  .reports-header h1 {
+    font-size: 24px;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .header-actions {
+    width: 100%;
+  }
+  
+  .refresh-button {
+    flex: 1;
+    justify-content: center;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .reports-card {
+    padding: 20px;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .page-info {
+    align-self: flex-start;
+  }
+  
+  .doctors-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .facilities-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-content {
+    padding: 24px;
+    border-radius: 16px;
+  }
+  
+  .quick-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .pagination {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .page-numbers {
+    order: 1;
+  }
+  
+  .pagination-button.previous {
+    order: 2;
+  }
+  
+  .pagination-button.next {
+    order: 3;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .error-actions {
+    flex-direction: column;
+  }
+  
+  .reports-table {
+    font-size: 14px;
+  }
+  
+  .reports-table th,
+  .reports-table td {
+    padding: 12px 8px;
+  }
+  
+  .view-button {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  
+  .view-button svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .quick-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-content {
+    padding: 20px;
+  }
+}
+`
+
+// Add styles to document
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style')
+  styleSheet.textContent = styles
+  document.head.appendChild(styleSheet)
+}
 
 export default ReportsHistory
