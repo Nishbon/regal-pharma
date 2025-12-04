@@ -12,11 +12,18 @@ const TeamManagement = () => {
   const [filter, setFilter] = useState('all') // all, active, inactive
   const [performanceData, setPerformanceData] = useState([])
 
+  // Emoji helper component
+  const Emoji = ({ symbol, label }) => (
+    <span role="img" aria-label={label}>
+      {symbol}
+    </span>
+  )
+
   // Load team members
   const loadTeamMembers = async () => {
     try {
       setLoading(true)
-      console.log('👥 Loading team members...')
+      console.log('Loading team members...')
       
       // For supervisors/admins: get all medreps
       if (user?.role === 'supervisor' || user?.role === 'admin') {
@@ -324,7 +331,9 @@ const TeamManagement = () => {
         padding: '20px',
         textAlign: 'center'
       }}>
-        <div style={{ fontSize: '6em', color: '#e74c3c' }}>🔒</div>
+        <div style={{ fontSize: '6em', color: '#e74c3c' }}>
+          <Emoji symbol="🔒" label="lock" />
+        </div>
         <h2 style={{ color: '#2c3e50', margin: '0' }}>Access Denied</h2>
         <p style={{ color: '#7f8c8d', fontSize: '1.1em' }}>
           You don't have permission to access Team Management.
@@ -375,7 +384,9 @@ const TeamManagement = () => {
         alignItems: 'center'
       }}>
         <div>
-          <h1 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>👥 Team Management</h1>
+          <h1 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>
+            <Emoji symbol="👥" label="team" /> Team Management
+          </h1>
           <p style={{ margin: '0', color: '#7f8c8d' }}>
             Manage your medical representatives and track their performance
           </p>
@@ -399,7 +410,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 12px rgba(46, 204, 113, 0.3)'
             }}
           >
-            📊 Export Team Report
+            <Emoji symbol="📊" label="chart" /> Export Team Report
           </button>
           
           <button
@@ -419,7 +430,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
             }}
           >
-            ➕ Add Team Member
+            <Emoji symbol="➕" label="add" /> Add Team Member
           </button>
         </div>
       </div>
@@ -551,25 +562,33 @@ const TeamManagement = () => {
                       <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3498db' }}>
                         {performance.stats.totalReports}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>Reports</div>
+                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                        <Emoji symbol="📋" label="reports" /> Reports
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2ecc71' }}>
                         {performance.stats.totalDoctors}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>Doctors</div>
+                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                        <Emoji symbol="👨‍⚕️" label="doctors" /> Doctors
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#9b59b6' }}>
                         {performance.stats.totalOrders}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>Orders</div>
+                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                        <Emoji symbol="📦" label="orders" /> Orders
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f39c12' }}>
                         RWF {(performance.stats.totalValue / 1000).toFixed(0)}K
                       </div>
-                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>Value</div>
+                      <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                        <Emoji symbol="💰" label="value" /> Value
+                      </div>
                     </div>
                   </div>
                   
@@ -585,7 +604,9 @@ const TeamManagement = () => {
                   borderRadius: '8px',
                   marginBottom: '20px'
                 }}>
-                  <div style={{ fontSize: '32px', marginBottom: '10px', opacity: '0.5' }}>📊</div>
+                  <div style={{ fontSize: '32px', marginBottom: '10px', opacity: '0.5' }}>
+                    <Emoji symbol="📊" label="no data" />
+                  </div>
                   <div style={{ color: '#7f8c8d', fontSize: '14px' }}>No activity data available</div>
                 </div>
               )}
@@ -609,7 +630,7 @@ const TeamManagement = () => {
                     gap: '8px'
                   }}
                 >
-                  📄 Export Report
+                  <Emoji symbol="📄" label="export" /> Export Report
                 </button>
                 
                 <button
@@ -627,7 +648,15 @@ const TeamManagement = () => {
                     gap: '8px'
                   }}
                 >
-                  {member.is_active === false ? '✅ Activate' : '⛔ Deactivate'}
+                  {member.is_active === false ? (
+                    <>
+                      <Emoji symbol="✅" label="activate" /> Activate
+                    </>
+                  ) : (
+                    <>
+                      <Emoji symbol="⛔" label="deactivate" /> Deactivate
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -643,7 +672,9 @@ const TeamManagement = () => {
           borderRadius: '15px',
           boxShadow: '0 5px 20px rgba(0,0,0,0.08)'
         }}>
-          <h3 style={{ margin: '0 0 25px 0', color: '#2c3e50' }}>📈 Team Performance Summary</h3>
+          <h3 style={{ margin: '0 0 25px 0', color: '#2c3e50' }}>
+            <Emoji symbol="📈" label="performance" /> Team Performance Summary
+          </h3>
           
           <div style={{
             display: 'grid',
@@ -687,7 +718,9 @@ const TeamManagement = () => {
           borderRadius: '15px',
           boxShadow: '0 5px 20px rgba(0,0,0,0.08)'
         }}>
-          <div style={{ fontSize: '5em', marginBottom: '20px', opacity: '0.5' }}>👥</div>
+          <div style={{ fontSize: '5em', marginBottom: '20px', opacity: '0.5' }}>
+            <Emoji symbol="👥" label="team" />
+          </div>
           <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>No Team Members Found</h3>
           <p style={{ margin: '0 0 30px 0', color: '#7f8c8d', fontSize: '1.1em', maxWidth: '500px', margin: '0 auto 30px' }}>
             Start building your team by adding medical representatives to track their performance.
@@ -706,7 +739,7 @@ const TeamManagement = () => {
               boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)'
             }}
           >
-            ➕ Add Your First Team Member
+            <Emoji symbol="➕" label="add" /> Add Your First Team Member
           </button>
         </div>
       )}
@@ -715,25 +748,35 @@ const TeamManagement = () => {
 }
 
 // Summary Card Component
-const SummaryCard = ({ title, value, icon, color }) => (
-  <div style={{
-    background: `linear-gradient(135deg, ${color}15 0%, ${color}25 100%)`,
-    padding: '25px',
-    borderRadius: '10px',
-    border: `1px solid ${color}30`,
-    textAlign: 'center'
-  }}>
-    <div style={{ fontSize: '2.5em', marginBottom: '15px' }}>{icon}</div>
-    <div style={{ 
-      fontSize: '2.2em', 
-      fontWeight: 'bold', 
-      color: color,
-      marginBottom: '10px'
+const SummaryCard = ({ title, value, icon, color }) => {
+  const Emoji = ({ symbol, label }) => (
+    <span role="img" aria-label={label}>
+      {symbol}
+    </span>
+  )
+  
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${color}15 0%, ${color}25 100%)`,
+      padding: '25px',
+      borderRadius: '10px',
+      border: `1px solid ${color}30`,
+      textAlign: 'center'
     }}>
-      {value}
+      <div style={{ fontSize: '2.5em', marginBottom: '15px' }}>
+        <Emoji symbol={icon} label={title.toLowerCase()} />
+      </div>
+      <div style={{ 
+        fontSize: '2.2em', 
+        fontWeight: 'bold', 
+        color: color,
+        marginBottom: '10px'
+      }}>
+        {value}
+      </div>
+      <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>{title}</div>
     </div>
-    <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>{title}</div>
-  </div>
-)
+  )
+}
 
 export default TeamManagement
