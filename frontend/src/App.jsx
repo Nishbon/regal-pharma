@@ -8,6 +8,7 @@ import DailyReport from './components/DailyReport';
 import ReportsHistory from './components/ReportsHistory';
 import PersonalAnalytics from './components/PersonalAnalytics';
 import TeamAnalytics from './components/TeamAnalytics';
+import TeamManagement from './components/TeamManagement'; // NEW IMPORT
 import Layout from './components/Layout';
 
 // Loading component for better UX
@@ -102,6 +103,20 @@ const SupervisorDashboardRoute = () => {
   }
 };
 
+// Team Management Route - Only for supervisors/admins
+const TeamManagementRoute = () => {
+  const { user } = useAuth();
+  
+  console.log('👥 TeamManagementRoute - User role:', user?.role);
+  
+  if (user?.role === 'supervisor' || user?.role === 'admin') {
+    return <TeamManagement />;
+  } else {
+    console.log('🚫 Access denied to team management, redirecting');
+    return <Navigate to="/dashboard" replace />;
+  }
+};
+
 // Main App Component
 function App() {
   return (
@@ -164,6 +179,26 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            
+            {/* TEAM MANAGEMENT - Only for supervisors/admins */}
+            <Route 
+              path="team-management" 
+              element={
+                <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
+                  <TeamManagementRoute />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* PROFILE PAGE (optional - you might want to add this later) */}
+            {/* <Route 
+              path="profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            /> */}
           </Route>
           
           {/* 404 route - at root level */}
