@@ -17,21 +17,21 @@ const requireSupervisor = (req, res, next) => {
 // ====================== GET USER'S OWN REPORTS ======================
 router.get('/my-reports', async (req, res) => {
   try {
-    console.log(`📋 Fetching reports for user ID: ${req.user.id}`);
+    console.log(`📋 Fetching reports for user ID: ${req.user._id}`);
     
     // Get query parameters for pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     
-    // Use REAL user ID from JWT token
+    // Use user._id from JWT token
     const [reports, total] = await Promise.all([
-      DailyReport.find({ user_id: req.user.id })
+      DailyReport.find({ user_id: req.user._id })
         .sort({ report_date: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      DailyReport.countDocuments({ user_id: req.user.id })
+      DailyReport.countDocuments({ user_id: req.user._id })
     ]);
     
     console.log(`✅ Found ${reports.length} reports for user ${req.user.username}`);
@@ -48,7 +48,7 @@ router.get('/my-reports', async (req, res) => {
         }
       },
       user: {
-        id: req.user.id,
+        id: req.user._id,  // Changed to _id
         username: req.user.username,
         name: req.user.name,
         region: req.user.region
@@ -162,7 +162,7 @@ router.post('/create', async (req, res) => {
       }
       
       const existingReport = await DailyReport.findOne({
-        user_id: req.user.id,
+        user_id: req.user._id,  // Changed to _id
         report_date: reportDate
       });
       
@@ -178,7 +178,7 @@ router.post('/create', async (req, res) => {
     
     // Create new report with current model structure
     const newReport = new DailyReport({
-      user_id: req.user.id,
+      user_id: req.user._id,  // Changed to _id
       report_date: reportDate,
       region: userRegion,
       dentists: parseInt(dentists) || 0,
@@ -254,7 +254,7 @@ router.get('/:id', async (req, res) => {
     }
     
     // Check if user owns this report or is supervisor
-    if (report.user_id.toString() !== req.user.id && 
+    if (report.user_id.toString() !== req.user._id.toString() &&  // Changed to _id
         req.user.role !== 'supervisor' && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -288,7 +288,7 @@ router.put('/:id', async (req, res) => {
     }
     
     // Check if user owns this report
-    if (report.user_id.toString() !== req.user.id) {
+    if (report.user_id.toString() !== req.user._id.toString()) {  // Changed to _id
       return res.status(403).json({
         success: false,
         message: 'You can only edit your own reports'
@@ -356,7 +356,7 @@ router.delete('/:id', async (req, res) => {
     }
     
     // Check if user owns this report or is supervisor
-    if (report.user_id.toString() !== req.user.id && 
+    if (report.user_id.toString() !== req.user._id.toString() &&  // Changed to _id
         req.user.role !== 'supervisor' && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -403,7 +403,7 @@ router.get('/date-range/:start/:end', async (req, res) => {
     
     // Regular users only see their own reports
     if (req.user.role !== 'supervisor' && req.user.role !== 'admin') {
-      query.user_id = req.user.id;
+      query.user_id = req.user._id;  // Changed to _id
     }
     
     const reports = await DailyReport.find(query)
