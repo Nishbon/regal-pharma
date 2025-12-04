@@ -46,6 +46,17 @@ api.interceptors.response.use(
   }
 );
 
+// Helper function for headers
+const getHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  };
+};
+
 // ====================== API ENDPOINTS ======================
 
 export const authAPI = {
@@ -71,7 +82,11 @@ export const reportsAPI = {
   
   // For SupervisorDashboard - get all reports
   getAll: () => 
-    api.get('/reports'),  // Changed from '/reports/all'
+    api.get('/reports/all'),  // FIXED: Changed from '/reports' to '/reports/all'
+  
+  // Get all reports without filter (for supervisors)
+  getAllReports: () => 
+    api.get('/reports/all'),
   
   create: (data) => 
     api.post('/reports/create', data),
@@ -86,7 +101,15 @@ export const reportsAPI = {
     api.delete(`/reports/${id}`),
   
   getByDateRange: (startDate, endDate) => 
-    api.get(`/reports/date-range/${startDate}/${endDate}`)
+    api.get(`/reports/date-range/${startDate}/${endDate}`),
+  
+  // New endpoint for Team Management
+  getReportsByUserId: (userId, startDate, endDate) => {
+    const params = {};
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
+    return api.get(`/reports/user/${userId}`, { params });
+  }
 };
 
 export const analyticsAPI = {
@@ -103,7 +126,18 @@ export const analyticsAPI = {
     api.get('/analytics/region-performance'),
   
   getDashboardSummary: () => 
-    api.get('/analytics/dashboard-summary')
+    api.get('/analytics/dashboard-summary'),
+  
+  // Export functionality endpoints
+  exportTeamReport: (period = 'month', format = 'pdf') => 
+    api.get(`/analytics/export/team?period=${period}&format=${format}`, {
+      responseType: 'blob' // Important for file downloads
+    }),
+  
+  exportMemberReport: (userId, period = 'month', format = 'pdf') => 
+    api.get(`/analytics/export/member/${userId}?period=${period}&format=${format}`, {
+      responseType: 'blob'
+    })
 };
 
 export const usersAPI = {
@@ -129,7 +163,90 @@ export const usersAPI = {
     api.put('/users/profile/me', data),
   
   getSupervisors: () => 
-    api.get('/users/supervisors')
+    api.get('/users/supervisors'),
+  
+  // Team Management specific endpoints
+  getActiveMedreps: () => 
+    api.get('/users/active-medreps'),
+  
+  getTeamMembers: () => 
+    api.get('/users/team-members'),
+  
+  deactivateUser: (userId) => 
+    api.put(`/users/${userId}/deactivate`, {}),
+  
+  activateUser: (userId) => 
+    api.put(`/users/${userId}/activate`, {}),
+  
+  updateUserStatus: (userId, action) => 
+    api.put(`/users/${userId}/${action}`, {}),
+  
+  // User search
+  searchUsers: (query) => 
+    api.get(`/users/search?query=${query}`),
+  
+  // User performance stats
+  getUserPerformance: (userId, period = 'month') => 
+    api.get(`/users/${userId}/performance?period=${period}`)
+};
+
+// Helper functions for PDF export
+export const exportAPI = {
+  // Generate PDF blob
+  generatePDF: async (data, type = 'team') => {
+    try {
+      let response;
+      if (type === 'team') {
+        response = await analyticsAPI.exportTeamReport('month', 'pdf');
+      } else if (type === 'member') {
+        response = await analyticsAPI.exportMemberReport(data.userId, 'month', 'pdf');
+      } else {
+        throw new Error('Invalid export type');
+      }
+      
+      if (response.data) {
+        // Create blob and download
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = type === 'team' 
+          ? `team-performance-${new Date().toISOString().split('T')[0]}.pdf`
+          : `member-performance-${data.userId}-${new Date().toISOString().split('T')[0]}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('PDF export error:', error);
+      throw error;
+    }
+  },
+
+  // Download file helper
+  downloadFile: (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+};
+
+// Debug helper
+export const debugAPI = {
+  testConnection: () => api.get('/'),
+  testAuth: () => api.get('/api/test-auth'),
+  debugHeaders: () => api.get('/api/debug/headers'),
+  health: () => api.get('/health'),
+  dbStatus: () => api.get('/api/debug/db')
 };
 
 export default api;
