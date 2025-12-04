@@ -13,12 +13,12 @@ const Layout = () => {
   }
 
   const navigationItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: '🏠', roles: ['medrep', 'supervisor', 'admin'] },
-    { path: '/daily-report', label: 'Daily Report', icon: '📝', roles: ['medrep', 'supervisor', 'admin'] },
-    { path: '/reports', label: 'Reports', icon: '📋', roles: ['medrep', 'supervisor', 'admin'] },
-    { path: '/analytics', label: 'Analytics', icon: '📊', roles: ['medrep', 'supervisor', 'admin'] },
-    { path: '/supervisor-dashboard', label: 'Team Dashboard', icon: '👑', roles: ['supervisor', 'admin'] },
-    { path: '/team-management', label: 'Team Management', icon: '👥', roles: ['supervisor', 'admin'] }, // NEW ITEM
+    { path: '/dashboard', label: 'Dashboard', icon: 'HOME', roles: ['medrep', 'supervisor', 'admin'] },
+    { path: '/daily-report', label: 'Daily Report', icon: 'REPORT', roles: ['medrep', 'supervisor', 'admin'] },
+    { path: '/reports', label: 'Reports', icon: 'FILES', roles: ['medrep', 'supervisor', 'admin'] },
+    { path: '/analytics', label: 'Analytics', icon: 'CHART', roles: ['medrep', 'supervisor', 'admin'] },
+    { path: '/supervisor-dashboard', label: 'Team Dashboard', icon: 'CROWN', roles: ['supervisor', 'admin'] },
+    { path: '/team-management', label: 'Team Management', icon: 'TEAM', roles: ['supervisor', 'admin'] },
   ]
 
   // Filter navigation items based on user role
@@ -74,7 +74,7 @@ const Layout = () => {
                 justifyContent: 'center',
                 fontSize: '18px'
               }}>
-                💊
+                RP
               </div>
               <div style={{ fontSize: '18px', fontWeight: '700' }}>
                 {isMobile ? 'RP' : 'Regal Pharma'}
@@ -91,7 +91,7 @@ const Layout = () => {
                 fontWeight: '500'
               }}>
                 <span style={{ marginRight: '6px' }}>
-                  {user?.role === 'supervisor' ? '👑' : user?.role === 'admin' ? '🔧' : '👨‍⚕️'}
+                  {user?.role === 'supervisor' ? 'S' : user?.role === 'admin' ? 'A' : 'R'}
                 </span>
                 {isMobile ? user?.name?.split(' ')[0] || 'User' : user?.name || 'User'}
                 <span style={{ 
@@ -126,7 +126,7 @@ const Layout = () => {
                   }
                 }}
               >
-                <span>🚪</span>
+                <span>LOGOUT</span>
                 {!isMobile && 'Logout'}
               </button>
             </div>
@@ -222,16 +222,16 @@ const Layout = () => {
               alignItems: 'center'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span>👨‍⚕️</span>
+                <span>MR</span>
                 <span>Medical Rep System</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span>📊</span>
+                <span>V</span>
                 <span>v1.0.0</span>
               </div>
               {(user?.role === 'supervisor' || user?.role === 'admin') && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <span>👥</span>
+                  <span>TM</span>
                   <span>Team Management</span>
                 </div>
               )}
