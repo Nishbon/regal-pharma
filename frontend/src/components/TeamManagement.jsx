@@ -20,7 +20,7 @@ const TeamManagement = () => {
       
       // For supervisors/admins: get all medreps
       if (user?.role === 'supervisor' || user?.role === 'admin') {
-        const response = await usersAPI.getActiveMedreps()
+        const response = await usersAPI.getActiveMedReps()
         if (response.data.success) {
           setTeamMembers(response.data.data || [])
           await loadPerformanceData(response.data.data || [])
