@@ -1,88 +1,83 @@
-import React, { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { usersAPI, reportsAPI } from '../services/api'
-import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { usersAPI, reportsAPI } from '../services/api';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const TeamManagement = () => {
-  const { user } = useAuth()
-  const [loading, setLoading] = useState(true)
-  const [teamMembers, setTeamMembers] = useState([])
-  const [selectedPeriod, setSelectedPeriod] = useState('month')
-  const [filter, setFilter] = useState('all') // all, active, inactive
-  const [performanceData, setPerformanceData] = useState([])
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [filter, setFilter] = useState('all');
+  const [performanceData, setPerformanceData] = useState([]);
 
-  // Load team members
   const loadTeamMembers = async () => {
     try {
-      setLoading(true)
-      console.log('Loading team members...')
+      setLoading(true);
+      console.log('Loading team members...');
       
-      // For supervisors/admins: get all medreps
       if (user?.role === 'supervisor' || user?.role === 'admin') {
-        const response = await usersAPI.getActiveMedreps()
+        const response = await usersAPI.getActiveMedreps();
         if (response.data.success) {
-          setTeamMembers(response.data.data || [])
-          await loadPerformanceData(response.data.data || [])
+          setTeamMembers(response.data.data || []);
+          await loadPerformanceData(response.data.data || []);
         }
       } else {
-        // Regular users can't access team management
-        setTeamMembers([])
+        setTeamMembers([]);
       }
     } catch (error) {
-      console.error('Error loading team members:', error)
-      setTeamMembers([])
+      console.error('Error loading team members:', error);
+      setTeamMembers([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
-  // Load performance data
   const loadPerformanceData = async (members) => {
     try {
-      const period = selectedPeriod
+      const period = selectedPeriod;
       const performancePromises = members.map(member => 
         getMemberPerformance(member._id || member.id, period)
-      )
+      );
       
-      const results = await Promise.all(performancePromises)
-      setPerformanceData(results.filter(Boolean))
+      const results = await Promise.all(performancePromises);
+      setPerformanceData(results.filter(Boolean));
     } catch (error) {
-      console.error('Error loading performance data:', error)
-      setPerformanceData([])
+      console.error('Error loading performance data:', error);
+      setPerformanceData([]);
     }
-  }
+  };
 
-  // Get individual member performance
   const getMemberPerformance = async (memberId, period = 'month') => {
     try {
-      let startDate = new Date()
+      let startDate = new Date();
       
       switch (period) {
         case 'week':
-          startDate.setDate(startDate.getDate() - 7)
-          break
+          startDate.setDate(startDate.getDate() - 7);
+          break;
         case 'month':
-          startDate.setDate(startDate.getDate() - 30)
-          break
+          startDate.setDate(startDate.getDate() - 30);
+          break;
         case 'quarter':
-          startDate.setDate(startDate.getDate() - 90)
-          break
+          startDate.setDate(startDate.getDate() - 90);
+          break;
         default:
-          startDate.setDate(startDate.getDate() - 30)
+          startDate.setDate(startDate.getDate() - 30);
       }
 
       const response = await reportsAPI.getReportsByDateRange(
         startDate.toISOString().split('T')[0],
         new Date().toISOString().split('T')[0]
-      )
+      );
 
       if (response.data.success) {
         const memberReports = response.data.data.filter(report => 
           report.user_id?._id === memberId || report.user_id === memberId
-        )
+        );
 
-        const stats = calculatePerformanceStats(memberReports)
+        const stats = calculatePerformanceStats(memberReports);
         
         return {
           memberId,
@@ -91,15 +86,14 @@ const TeamManagement = () => {
           lastActivity: memberReports.length > 0 
             ? new Date(memberReports[0].report_date).toLocaleDateString()
             : 'No activity'
-        }
+        };
       }
     } catch (error) {
-      console.error(`Error getting performance for member ${memberId}:`, error)
-      return null
+      console.error(`Error getting performance for member ${memberId}:`, error);
+      return null;
     }
-  }
+  };
 
-  // Calculate performance stats
   const calculatePerformanceStats = (reports) => {
     const stats = reports.reduce((acc, report) => ({
       totalReports: acc.totalReports + 1,
@@ -115,21 +109,20 @@ const TeamManagement = () => {
       totalDispensaries: 0,
       totalOrders: 0,
       totalValue: 0
-    })
+    });
 
-    // Calculate averages
     if (stats.totalReports > 0) {
-      stats.avgDoctorsPerDay = (stats.totalDoctors / stats.totalReports).toFixed(1)
-      stats.avgOrdersPerDay = (stats.totalOrders / stats.totalReports).toFixed(1)
-      stats.avgValuePerDay = (stats.totalValue / stats.totalReports).toFixed(0)
+      stats.avgDoctorsPerDay = (stats.totalDoctors / stats.totalReports).toFixed(1);
+      stats.avgOrdersPerDay = (stats.totalOrders / stats.totalReports).toFixed(1);
+      stats.avgValuePerDay = (stats.totalValue / stats.totalReports).toFixed(0);
     } else {
-      stats.avgDoctorsPerDay = 0
-      stats.avgOrdersPerDay = 0
-      stats.avgValuePerDay = 0
+      stats.avgDoctorsPerDay = 0;
+      stats.avgOrdersPerDay = 0;
+      stats.avgValuePerDay = 0;
     }
 
-    return stats
-  }
+    return stats;
+  };
 
   const calculateTotalDoctors = (report) => {
     return (
@@ -140,26 +133,22 @@ const TeamManagement = () => {
       (report.general_practitioners || 0) +
       (report.pediatricians || 0) +
       (report.dermatologists || 0)
-    )
-  }
+    );
+  };
 
-  // Export to PDF
   const exportToPDF = () => {
-    const doc = new jsPDF()
+    const doc = new jsPDF();
     
-    // Title
-    doc.setFontSize(20)
-    doc.text('Team Performance Report', 20, 20)
+    doc.setFontSize(20);
+    doc.text('Team Performance Report', 20, 20);
     
-    // Subtitle
-    doc.setFontSize(12)
-    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30)
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 37)
-    doc.text(`Generated by: ${user?.name || 'Supervisor'}`, 20, 44)
+    doc.setFontSize(12);
+    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 37);
+    doc.text(`Generated by: ${user?.name || 'Supervisor'}`, 20, 44);
 
-    // Performance Summary Table
     const tableData = performanceData.map((data, index) => {
-      const member = teamMembers.find(m => m._id === data.memberId || m.id === data.memberId)
+      const member = teamMembers.find(m => m._id === data.memberId || m.id === data.memberId);
       return [
         index + 1,
         member?.name || 'Unknown',
@@ -169,8 +158,8 @@ const TeamManagement = () => {
         data.stats.totalOrders,
         `RWF ${data.stats.totalValue.toLocaleString()}`,
         data.lastActivity
-      ]
-    })
+      ];
+    });
 
     autoTable(doc, {
       head: [['#', 'Name', 'Region', 'Reports', 'Doctors', 'Orders', 'Value', 'Last Activity']],
@@ -185,49 +174,43 @@ const TeamManagement = () => {
         2: { cellWidth: 30 },
         6: { cellWidth: 35 }
       }
-    })
+    });
 
-    // Add totals
     const totals = performanceData.reduce((acc, data) => ({
       reports: acc.reports + data.stats.totalReports,
       doctors: acc.doctors + data.stats.totalDoctors,
       orders: acc.orders + data.stats.totalOrders,
       value: acc.value + data.stats.totalValue
-    }), { reports: 0, doctors: 0, orders: 0, value: 0 })
+    }), { reports: 0, doctors: 0, orders: 0, value: 0 });
 
-    const finalY = doc.lastAutoTable.finalY + 10
-    doc.setFontSize(11)
-    doc.setFont(undefined, 'bold')
-    doc.text('Team Totals:', 20, finalY)
-    doc.setFont(undefined, 'normal')
-    doc.text(`Total Reports: ${totals.reports}`, 20, finalY + 8)
-    doc.text(`Total Doctors Visited: ${totals.doctors}`, 20, finalY + 16)
-    doc.text(`Total Orders: ${totals.orders}`, 20, finalY + 24)
-    doc.text(`Total Value: RWF ${totals.value.toLocaleString()}`, 20, finalY + 32)
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.text('Team Totals:', 20, finalY);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Total Reports: ${totals.reports}`, 20, finalY + 8);
+    doc.text(`Total Doctors Visited: ${totals.doctors}`, 20, finalY + 16);
+    doc.text(`Total Orders: ${totals.orders}`, 20, finalY + 24);
+    doc.text(`Total Value: RWF ${totals.value.toLocaleString()}`, 20, finalY + 32);
 
-    // Save PDF
-    doc.save(`Team-Performance-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.pdf`)
-  }
+    doc.save(`Team-Performance-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
 
-  // Export detailed report for a team member
   const exportMemberPDF = (member, performance) => {
-    if (!performance) return
+    if (!performance) return;
 
-    const doc = new jsPDF()
+    const doc = new jsPDF();
     
-    // Title
-    doc.setFontSize(20)
-    doc.text(`${member.name} - Performance Report`, 20, 20)
+    doc.setFontSize(20);
+    doc.text(`${member.name} - Performance Report`, 20, 20);
     
-    // Subtitle
-    doc.setFontSize(12)
-    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30)
-    doc.text(`Region: ${member.region || 'N/A'}`, 20, 37)
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 44)
+    doc.setFontSize(12);
+    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30);
+    doc.text(`Region: ${member.region || 'N/A'}`, 20, 37);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 44);
 
-    // Summary stats
-    doc.setFontSize(14)
-    doc.text('Performance Summary', 20, 60)
+    doc.setFontSize(14);
+    doc.text('Performance Summary', 20, 60);
     
     const summaryData = [
       ['Total Reports', performance.stats.totalReports],
@@ -239,7 +222,7 @@ const TeamManagement = () => {
       ['Average Doctors/Day', performance.stats.avgDoctorsPerDay],
       ['Average Orders/Day', performance.stats.avgOrdersPerDay],
       ['Average Value/Day', `RWF ${performance.stats.avgValuePerDay}`]
-    ]
+    ];
 
     autoTable(doc, {
       body: summaryData,
@@ -250,13 +233,12 @@ const TeamManagement = () => {
         0: { fontStyle: 'bold', cellWidth: 80 },
         1: { cellWidth: 60 }
       }
-    })
+    });
 
-    // Recent Reports Table
     if (performance.reports.length > 0) {
-      const recentY = doc.lastAutoTable.finalY + 15
-      doc.setFontSize(14)
-      doc.text('Recent Reports', 20, recentY)
+      const recentY = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(14);
+      doc.text('Recent Reports', 20, recentY);
 
       const reportData = performance.reports.slice(0, 10).map(report => [
         new Date(report.report_date).toLocaleDateString(),
@@ -266,7 +248,7 @@ const TeamManagement = () => {
         report.orders_count || 0,
         `RWF ${(report.orders_value || 0).toLocaleString()}`,
         report.summary?.substring(0, 30) + (report.summary?.length > 30 ? '...' : '') || ''
-      ])
+      ]);
 
       autoTable(doc, {
         head: [['Date', 'Doctors', 'Pharmacy', 'Dispensary', 'Orders', 'Value', 'Notes']],
@@ -277,41 +259,35 @@ const TeamManagement = () => {
         columnStyles: {
           6: { cellWidth: 40 }
         }
-      })
+      });
     }
 
-    doc.save(`${member.name}-Performance-${selectedPeriod}.pdf`)
-  }
+    doc.save(`${member.name}-Performance-${selectedPeriod}.pdf`);
+  };
 
-  // Add new team member
   const addTeamMember = () => {
-    // You can implement a modal or form for adding new members
-    alert('Add team member functionality would open a form here')
-    // Example: navigate to add member form
-    // navigate('/add-team-member')
-  }
+    alert('Add team member functionality would open a form here');
+  };
 
-  // Toggle active status
   const toggleActiveStatus = async (memberId, currentStatus) => {
     try {
       if (window.confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this team member?`)) {
-        const endpoint = currentStatus ? 'deactivate' : 'activate'
-        await usersAPI.updateUserStatus(memberId, endpoint)
-        loadTeamMembers() // Refresh list
+        const endpoint = currentStatus ? 'deactivate' : 'activate';
+        await usersAPI.updateUserStatus(memberId, endpoint);
+        loadTeamMembers();
       }
     } catch (error) {
-      console.error('Error updating member status:', error)
-      alert('Failed to update member status')
+      console.error('Error updating member status:', error);
+      alert('Failed to update member status');
     }
-  }
+  };
 
   useEffect(() => {
     if (user?.role === 'supervisor' || user?.role === 'admin') {
-      loadTeamMembers()
+      loadTeamMembers();
     }
-  }, [selectedPeriod, filter])
+  }, [selectedPeriod, filter]);
 
-  // If user is not supervisor/admin
   if (!user || (user.role !== 'supervisor' && user.role !== 'admin')) {
     return (
       <div style={{ 
@@ -334,7 +310,7 @@ const TeamManagement = () => {
           This section is only available for supervisors and administrators.
         </p>
       </div>
-    )
+    );
   }
 
   if (loading) {
@@ -353,19 +329,18 @@ const TeamManagement = () => {
           borderRadius: '50%', 
           animation: 'spin 1s linear infinite' 
         }}></div>
-        <style>{`
-          @keyframes spin {
+        <style>
+          {`@keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-          }
-        `}</style>
+          }`}
+        </style>
       </div>
-    )
+    );
   }
 
   return (
     <div style={{ padding: '20px', minHeight: '100vh', background: '#f8f9fa' }}>
-      {/* Header */}
       <div style={{
         background: 'white',
         padding: '30px',
@@ -428,7 +403,6 @@ const TeamManagement = () => {
         </div>
       </div>
 
-      {/* Filters */}
       <div style={{
         display: 'flex',
         gap: '20px',
@@ -482,7 +456,6 @@ const TeamManagement = () => {
         </div>
       </div>
 
-      {/* Team Members Grid */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -490,7 +463,7 @@ const TeamManagement = () => {
         marginBottom: '40px'
       }}>
         {teamMembers.map(member => {
-          const performance = performanceData.find(p => p.memberId === (member._id || member.id))
+          const performance = performanceData.find(p => p.memberId === (member._id || member.id));
           
           return (
             <div
@@ -501,14 +474,17 @@ const TeamManagement = () => {
                 padding: '25px',
                 boxShadow: '0 5px 20px rgba(0,0,0,0.08)',
                 border: `2px solid ${member.is_active === false ? '#e74c3c' : '#2ecc71'}`,
-                transition: 'transform 0.3s ease',
-                ':hover': {
-                  transform: 'translateY(-5px)',
-                  boxShadow: '0 8px 25px rgba(0,0,0,0.12)'
-                }
+                transition: 'transform 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-5px)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.12)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 5px 20px rgba(0,0,0,0.08)';
               }}
             >
-              {/* Member Header */}
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
                 <div style={{
                   width: '60px',
@@ -542,7 +518,6 @@ const TeamManagement = () => {
                 </div>
               </div>
 
-              {/* Performance Stats */}
               {performance ? (
                 <div style={{ marginBottom: '20px' }}>
                   <div style={{
@@ -604,7 +579,6 @@ const TeamManagement = () => {
                 </div>
               )}
 
-              {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
                   onClick={() => exportMemberPDF(member, performance)}
@@ -645,11 +619,10 @@ const TeamManagement = () => {
                 </button>
               </div>
             </div>
-          )
+          );
         })}
       </div>
 
-      {/* Summary Stats */}
       {performanceData.length > 0 && (
         <div style={{
           background: 'white',
@@ -666,31 +639,78 @@ const TeamManagement = () => {
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: '20px'
           }}>
-            <SummaryCard
-              title="Total Reports"
-              value={performanceData.reduce((sum, p) => sum + p.stats.totalReports, 0)}
-              color="#667eea"
-            />
-            <SummaryCard
-              title="Total Doctors Visited"
-              value={performanceData.reduce((sum, p) => sum + p.stats.totalDoctors, 0)}
-              color="#3498db"
-            />
-            <SummaryCard
-              title="Total Orders"
-              value={performanceData.reduce((sum, p) => sum + p.stats.totalOrders, 0)}
-              color="#9b59b6"
-            />
-            <SummaryCard
-              title="Total Value"
-              value={`RWF ${performanceData.reduce((sum, p) => sum + p.stats.totalValue, 0).toLocaleString()}`}
-              color="#f39c12"
-            />
+            <div style={{
+              background: `linear-gradient(135deg, #667eea15 0%, #667eea25 100%)`,
+              padding: '25px',
+              borderRadius: '10px',
+              border: `1px solid #667eea30`,
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                fontSize: '2.2em', 
+                fontWeight: 'bold', 
+                color: '#667eea',
+                marginBottom: '10px'
+              }}>
+                {performanceData.reduce((sum, p) => sum + p.stats.totalReports, 0)}
+              </div>
+              <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>Total Reports</div>
+            </div>
+            <div style={{
+              background: `linear-gradient(135deg, #3498db15 0%, #3498db25 100%)`,
+              padding: '25px',
+              borderRadius: '10px',
+              border: `1px solid #3498db30`,
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                fontSize: '2.2em', 
+                fontWeight: 'bold', 
+                color: '#3498db',
+                marginBottom: '10px'
+              }}>
+                {performanceData.reduce((sum, p) => sum + p.stats.totalDoctors, 0)}
+              </div>
+              <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>Total Doctors Visited</div>
+            </div>
+            <div style={{
+              background: `linear-gradient(135deg, #9b59b615 0%, #9b59b625 100%)`,
+              padding: '25px',
+              borderRadius: '10px',
+              border: `1px solid #9b59b630`,
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                fontSize: '2.2em', 
+                fontWeight: 'bold', 
+                color: '#9b59b6',
+                marginBottom: '10px'
+              }}>
+                {performanceData.reduce((sum, p) => sum + p.stats.totalOrders, 0)}
+              </div>
+              <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>Total Orders</div>
+            </div>
+            <div style={{
+              background: `linear-gradient(135deg, #f39c1215 0%, #f39c1225 100%)`,
+              padding: '25px',
+              borderRadius: '10px',
+              border: `1px solid #f39c1230`,
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                fontSize: '2.2em', 
+                fontWeight: 'bold', 
+                color: '#f39c12',
+                marginBottom: '10px'
+              }}>
+                {`RWF ${performanceData.reduce((sum, p) => sum + p.stats.totalValue, 0).toLocaleString()}`}
+              </div>
+              <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>Total Value</div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* No Team Members Message */}
       {teamMembers.length === 0 && (
         <div style={{
           textAlign: 'center',
@@ -725,30 +745,7 @@ const TeamManagement = () => {
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-// Summary Card Component
-const SummaryCard = ({ title, value, color }) => {
-  return (
-    <div style={{
-      background: `linear-gradient(135deg, ${color}15 0%, ${color}25 100%)`,
-      padding: '25px',
-      borderRadius: '10px',
-      border: `1px solid ${color}30`,
-      textAlign: 'center'
-    }}>
-      <div style={{ 
-        fontSize: '2.2em', 
-        fontWeight: 'bold', 
-        color: color,
-        marginBottom: '10px'
-      }}>
-        {value}
-      </div>
-      <div style={{ color: '#7f8c8d', fontSize: '0.95em' }}>{title}</div>
-    </div>
-  )
-}
-
-export default TeamManagement
+export default TeamManagement;
