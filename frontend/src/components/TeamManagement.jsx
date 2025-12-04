@@ -12,6 +12,7 @@ const TeamManagement = () => {
   const [filter, setFilter] = useState('all') // all, active, inactive
   const [performanceData, setPerformanceData] = useState([])
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   useEffect(() => {
     if (user?.role === 'supervisor' || user?.role === 'admin') {
@@ -23,28 +24,37 @@ const TeamManagement = () => {
     try {
       setLoading(true)
       setError('')
+      setSuccessMessage('')
       
       console.log(`👥 Loading team members for ${user?.name || 'supervisor'}...`)
       
-      if (user?.role === 'supervisor' || user?.role === 'admin') {
-        const response = await usersAPI.getActiveMedReps()
-        
-        console.log('Team members response:', response.data)
-        
-        if (response.data.success) {
-          const members = response.data.data || []
-          setTeamMembers(members)
-          await loadPerformanceData(members)
-        } else {
-          setError(`Failed to load team members: ${response.data.message || 'Unknown error'}`)
-          setTeamMembers([])
-        }
+      // Try different endpoints - find which one works
+      let response;
+      try {
+        response = await usersAPI.getTeamMembers()
+      } catch (e) {
+        console.log('getTeamMembers failed, trying getActiveMedReps...')
+        response = await usersAPI.getActiveMedReps()
+      }
+      
+      console.log('Team members response:', response.data)
+      
+      if (response.data?.success) {
+        const members = response.data.data || response.data.users || []
+        setTeamMembers(members)
+        await loadPerformanceData(members)
+      } else if (response.data) {
+        // Handle different response structures
+        const members = response.data || []
+        setTeamMembers(members)
+        await loadPerformanceData(members)
       } else {
+        setError('Failed to load team members: Invalid response format')
         setTeamMembers([])
       }
     } catch (error) {
       console.error('Error loading team members:', error)
-      setError('Failed to load team data. Please try again.')
+      setError(`Failed to load team data: ${error.message}`)
       setTeamMembers([])
     } finally {
       setLoading(false)
@@ -84,14 +94,29 @@ const TeamManagement = () => {
           startDate.setDate(startDate.getDate() - 30)
       }
 
-      const response = await reportsAPI.getReportsByDateRange(
-        startDate.toISOString().split('T')[0],
-        new Date().toISOString().split('T')[0]
-      )
+      // Try different endpoint formats
+      let response;
+      try {
+        response = await reportsAPI.getReportsByDateRange(
+          startDate.toISOString().split('T')[0],
+          new Date().toISOString().split('T')[0]
+        )
+      } catch (e) {
+        console.log('getReportsByDateRange failed, trying getReportsByUserId...')
+        response = await reportsAPI.getReportsByUserId(
+          memberId,
+          startDate.toISOString().split('T')[0],
+          new Date().toISOString().split('T')[0]
+        )
+      }
 
-      if (response.data.success) {
-        const memberReports = response.data.data.filter(report => 
-          report.user_id?._id === memberId || report.user_id === memberId
+      const responseData = response.data || {}
+      
+      if (responseData.success || responseData.reports) {
+        const memberReports = (responseData.data || responseData.reports || []).filter(report => 
+          report.user_id?._id === memberId || 
+          report.user_id === memberId ||
+          report.userId === memberId
         )
 
         const stats = calculatePerformanceStats(memberReports)
@@ -101,10 +126,11 @@ const TeamManagement = () => {
           reports: memberReports,
           stats,
           lastActivity: memberReports.length > 0 
-            ? new Date(memberReports[0].report_date).toLocaleDateString()
+            ? new Date(memberReports[0].report_date || memberReports[0].date).toLocaleDateString()
             : 'No activity'
         }
       }
+      return null
     } catch (error) {
       console.error(`Error getting performance for member ${memberId}:`, error)
       return null
@@ -117,8 +143,8 @@ const TeamManagement = () => {
       totalDoctors: acc.totalDoctors + calculateTotalDoctors(report),
       totalPharmacies: acc.totalPharmacies + (report.pharmacies || 0),
       totalDispensaries: acc.totalDispensaries + (report.dispensaries || 0),
-      totalOrders: acc.totalOrders + (report.orders_count || 0),
-      totalValue: acc.totalValue + (report.orders_value || 0)
+      totalOrders: acc.totalOrders + (report.orders_count || report.orders || 0),
+      totalValue: acc.totalValue + (report.orders_value || report.value || 0)
     }), {
       totalReports: 0,
       totalDoctors: 0,
@@ -143,15 +169,22 @@ const TeamManagement = () => {
   }
 
   const calculateTotalDoctors = (report) => {
-    return (
+    // Try different field names
+    const doctors = 
       (report.dentists || 0) +
       (report.physiotherapists || 0) +
       (report.gynecologists || 0) +
       (report.internists || 0) +
-      (report.general_practitioners || 0) +
+      (report.general_practitioners || report.generalPractitioners || 0) +
       (report.pediatricians || 0) +
       (report.dermatologists || 0)
-    )
+    
+    // If no doctor fields, try total_doctors field
+    if (doctors === 0 && report.total_doctors) {
+      return report.total_doctors
+    }
+    
+    return doctors
   }
 
   const getTotals = () => {
@@ -160,156 +193,97 @@ const TeamManagement = () => {
     }
     
     return performanceData.reduce((totals, data) => ({
-      reports: totals.reports + data.stats.totalReports,
-      doctors: totals.doctors + data.stats.totalDoctors,
-      orders: totals.orders + data.stats.totalOrders,
-      value: totals.value + data.stats.totalValue,
+      reports: totals.reports + (data?.stats?.totalReports || 0),
+      doctors: totals.doctors + (data?.stats?.totalDoctors || 0),
+      orders: totals.orders + (data?.stats?.totalOrders || 0),
+      value: totals.value + (data?.stats?.totalValue || 0),
       members: totals.members + 1
     }), { reports: 0, doctors: 0, orders: 0, value: 0, members: 0 })
   }
 
-  const exportToPDF = () => {
-    const doc = new jsPDF()
-    
-    doc.setFontSize(20)
-    doc.text('Team Performance Report', 20, 20)
-    
-    doc.setFontSize(12)
-    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30)
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 37)
-    doc.text(`Generated by: ${user?.name || 'Supervisor'}`, 20, 44)
+  // Add new team member - MODAL VERSION
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newMember, setNewMember] = useState({
+    name: '',
+    email: '',
+    username: '',
+    password: '',
+    region: '',
+    phone: '',
+    role: 'medrep'
+  })
 
-    const tableData = performanceData.map((data, index) => {
-      const member = teamMembers.find(m => m._id === data.memberId || m.id === data.memberId)
-      return [
-        index + 1,
-        member?.name || 'Unknown',
-        member?.region || 'N/A',
-        data.stats.totalReports,
-        data.stats.totalDoctors,
-        data.stats.totalOrders,
-        `RWF ${data.stats.totalValue.toLocaleString()}`,
-        data.lastActivity
-      ]
-    })
-
-    autoTable(doc, {
-      head: [['#', 'Name', 'Region', 'Reports', 'Doctors', 'Orders', 'Value', 'Last Activity']],
-      body: tableData,
-      startY: 50,
-      theme: 'grid',
-      headStyles: { fillColor: [59, 130, 246] },
-      styles: { fontSize: 10, cellPadding: 3 },
-      columnStyles: {
-        0: { cellWidth: 10 },
-        1: { cellWidth: 40 },
-        2: { cellWidth: 30 },
-        6: { cellWidth: 35 }
-      }
-    })
-
-    const totals = getTotals()
-    const finalY = doc.lastAutoTable.finalY + 10
-    doc.setFontSize(11)
-    doc.setFont(undefined, 'bold')
-    doc.text('Team Totals:', 20, finalY)
-    doc.setFont(undefined, 'normal')
-    doc.text(`Total Reports: ${totals.reports}`, 20, finalY + 8)
-    doc.text(`Total Doctors Visited: ${totals.doctors}`, 20, finalY + 16)
-    doc.text(`Total Orders: ${totals.orders}`, 20, finalY + 24)
-    doc.text(`Total Value: RWF ${totals.value.toLocaleString()}`, 20, finalY + 32)
-
-    doc.save(`Team-Performance-${selectedPeriod}-${new Date().toISOString().split('T')[0]}.pdf`)
-  }
-
-  const exportMemberPDF = (member, performance) => {
-    if (!performance) return
-
-    const doc = new jsPDF()
-    
-    doc.setFontSize(20)
-    doc.text(`${member.name} - Performance Report`, 20, 20)
-    
-    doc.setFontSize(12)
-    doc.text(`Period: ${selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1)}`, 20, 30)
-    doc.text(`Region: ${member.region || 'N/A'}`, 20, 37)
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 20, 44)
-
-    doc.setFontSize(14)
-    doc.text('Performance Summary', 20, 60)
-    
-    const summaryData = [
-      ['Total Reports', performance.stats.totalReports],
-      ['Total Doctors Visited', performance.stats.totalDoctors],
-      ['Total Pharmacies Visited', performance.stats.totalPharmacies],
-      ['Total Dispensaries Visited', performance.stats.totalDispensaries],
-      ['Total Orders', performance.stats.totalOrders],
-      ['Total Order Value', `RWF ${performance.stats.totalValue.toLocaleString()}`],
-      ['Average Doctors/Day', performance.stats.avgDoctorsPerDay],
-      ['Average Orders/Day', performance.stats.avgOrdersPerDay],
-      ['Average Value/Day', `RWF ${performance.stats.avgValuePerDay}`]
-    ]
-
-    autoTable(doc, {
-      body: summaryData,
-      startY: 70,
-      theme: 'grid',
-      styles: { fontSize: 10, cellPadding: 3 },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 80 },
-        1: { cellWidth: 60 }
-      }
-    })
-
-    if (performance.reports.length > 0) {
-      const recentY = doc.lastAutoTable.finalY + 15
-      doc.setFontSize(14)
-      doc.text('Recent Reports', 20, recentY)
-
-      const reportData = performance.reports.slice(0, 10).map(report => [
-        new Date(report.report_date).toLocaleDateString(),
-        calculateTotalDoctors(report),
-        report.pharmacies || 0,
-        report.dispensaries || 0,
-        report.orders_count || 0,
-        `RWF ${(report.orders_value || 0).toLocaleString()}`,
-        report.summary?.substring(0, 30) + (report.summary?.length > 30 ? '...' : '') || ''
-      ])
-
-      autoTable(doc, {
-        head: [['Date', 'Doctors', 'Pharmacy', 'Dispensary', 'Orders', 'Value', 'Notes']],
-        body: reportData,
-        startY: recentY + 5,
-        theme: 'grid',
-        styles: { fontSize: 8, cellPadding: 2 },
-        columnStyles: {
-          6: { cellWidth: 40 }
-        }
-      })
-    }
-
-    doc.save(`${member.name}-Performance-${selectedPeriod}.pdf`)
-  }
-
-  const addTeamMember = () => {
-    alert('Add team member functionality would open a form here')
-  }
-
-  const toggleActiveStatus = async (memberId, currentStatus) => {
+  const addTeamMember = async () => {
     try {
-      if (window.confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} this team member?`)) {
-        const endpoint = currentStatus ? 'deactivate' : 'activate'
-        await usersAPI.updateUserStatus(memberId, endpoint)
+      setLoading(true)
+      setError('')
+      
+      // Basic validation
+      if (!newMember.name || !newMember.email || !newMember.username || !newMember.password) {
+        setError('Please fill in all required fields')
+        setLoading(false)
+        return
+      }
+
+      const response = await usersAPI.create({
+        name: newMember.name,
+        email: newMember.email,
+        username: newMember.username,
+        password: newMember.password,
+        region: newMember.region,
+        phone: newMember.phone,
+        role: newMember.role
+      })
+
+      if (response.data?.success) {
+        setSuccessMessage(`Team member ${newMember.name} added successfully!`)
+        setNewMember({
+          name: '',
+          email: '',
+          username: '',
+          password: '',
+          region: '',
+          phone: '',
+          role: 'medrep'
+        })
+        setShowAddModal(false)
+        loadTeamMembers()
+      } else {
+        setError(response.data?.message || 'Failed to add team member')
+      }
+    } catch (error) {
+      console.error('Error adding team member:', error)
+      setError(error.response?.data?.message || 'Failed to add team member')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Toggle active status
+  const toggleActiveStatus = async (memberId, currentStatus, memberName) => {
+    try {
+      if (window.confirm(`Are you sure you want to ${currentStatus ? 'deactivate' : 'activate'} ${memberName}?`)) {
+        setLoading(true)
+        
+        if (currentStatus) {
+          await usersAPI.deactivateUser(memberId)
+          setSuccessMessage(`${memberName} has been deactivated`)
+        } else {
+          await usersAPI.activateUser(memberId)
+          setSuccessMessage(`${memberName} has been activated`)
+        }
+        
         loadTeamMembers()
       }
     } catch (error) {
       console.error('Error updating member status:', error)
-      alert('Failed to update member status')
+      setError(error.response?.data?.message || 'Failed to update member status')
+      setLoading(false)
     }
   }
 
+  // Refresh data
   const refreshData = () => {
-    setLoading(true)
     loadTeamMembers()
   }
 
@@ -329,7 +303,7 @@ const TeamManagement = () => {
     )
   }
 
-  if (loading) {
+  if (loading && teamMembers.length === 0) {
     return (
       <div className="team-management-loading">
         <div className="loading-spinner"></div>
@@ -340,8 +314,8 @@ const TeamManagement = () => {
 
   const totals = getTotals()
   const filteredMembers = teamMembers.filter(member => {
-    if (filter === 'active') return member.is_active !== false
-    if (filter === 'inactive') return member.is_active === false
+    if (filter === 'active') return member.is_active !== false && member.status !== 'inactive'
+    if (filter === 'inactive') return member.is_active === false || member.status === 'inactive'
     return true
   })
 
@@ -357,7 +331,7 @@ const TeamManagement = () => {
             </p>
             
             <div className="debug-info">
-              Showing: {selectedPeriod === 'week' ? 'Weekly' : selectedPeriod === 'month' ? 'Monthly' : 'Quarterly'} data • {teamMembers.length} team members
+              Showing: {selectedPeriod === 'week' ? 'Weekly' : selectedPeriod === 'month' ? 'Monthly' : 'Quarterly'} data • {filteredMembers.length} team members
             </div>
           </div>
           <div className="header-actions">
@@ -373,6 +347,24 @@ const TeamManagement = () => {
         </div>
       </div>
 
+      {/* Success Message */}
+      {successMessage && (
+        <div className="success-card">
+          <div className="success-content">
+            <div className="success-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22 11.08V12C21.9988 14.1564 21.3005 16.2547 20.0093 17.9818C18.7182 19.709 16.9033 20.9725 14.8354 21.5839C12.7674 22.1953 10.5573 22.1219 8.53447 21.3746C6.51168 20.6273 4.78465 19.2461 3.61096 17.4371C2.43727 15.628 1.87979 13.4881 2.02168 11.3363C2.16356 9.18455 2.99721 7.13631 4.39828 5.49706C5.79935 3.85781 7.69279 2.71537 9.79619 2.24013C11.8996 1.7649 14.1003 1.98232 16.07 2.85999" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div className="success-text">{successMessage}</div>
+            <button onClick={() => setSuccessMessage('')} className="success-close">
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <div className="error-card">
@@ -384,10 +376,10 @@ const TeamManagement = () => {
               </svg>
             </div>
             <div className="error-text">{error}</div>
+            <button onClick={() => setError('')} className="error-close">
+              &times;
+            </button>
           </div>
-          <button onClick={refreshData} className="error-retry">
-            Retry
-          </button>
         </div>
       )}
 
@@ -440,8 +432,8 @@ const TeamManagement = () => {
         />
       </div>
 
-      {/* Filter Section */}
-      <div className="filter-section">
+      {/* Filter and Action Bar */}
+      <div className="action-bar">
         <div className="filter-buttons">
           {['all', 'active', 'inactive'].map(status => (
             <button
@@ -453,82 +445,55 @@ const TeamManagement = () => {
             </button>
           ))}
         </div>
+        <div className="action-buttons">
+          <button onClick={() => setShowAddModal(true)} className="add-member-button">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Add New Member
+          </button>
+        </div>
       </div>
 
-      {/* Main Content */}
-      <div className="management-content">
-        {/* Team Members */}
-        <div className="management-card">
-          <div className="card-header">
-            <div className="header-title">
-              <h3>Team Members</h3>
-              <div className="data-count">
-                {filteredMembers.length} members • {performanceData.length} with data
-              </div>
-            </div>
-            <div className="header-actions">
-              <button onClick={addTeamMember} className="add-member-button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Add Member
-              </button>
-              <button onClick={exportToPDF} className="export-button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                Export All
-              </button>
-            </div>
+      {/* Team Members Grid */}
+      <div className="team-grid">
+        {filteredMembers.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">👥</div>
+            <h4>No Team Members Found</h4>
+            <p>No members found with the current filter. Try changing the filter or add new members.</p>
+            <button onClick={() => setShowAddModal(true)} className="add-first-button">
+              Add Your First Team Member
+            </button>
           </div>
-          
-          {filteredMembers.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 21V19C17 17.9391 16.5786 16.9217 15.8284 16.1716C15.0783 15.4214 14.0609 15 13 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 11C11.2091 11 13 9.20914 13 7C13 4.79086 11.2091 3 9 3C6.79086 3 5 4.79086 5 7C5 9.20914 6.79086 11 9 11Z" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M23 21V19C22.9993 18.1137 22.7044 17.2528 22.1614 16.5523C21.6184 15.8519 20.8581 15.3516 20 15.13" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 3.13C16.8604 3.35031 17.623 3.85071 18.1676 4.55232C18.7122 5.25392 19.0078 6.11683 19.0078 7.005C19.0078 7.89318 18.7122 8.75608 18.1676 9.45769C17.623 10.1593 16.8604 10.6597 16 10.88" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <h4>No Team Members Found</h4>
-              <p>Start building your team by adding medical representatives.</p>
-              <button onClick={addTeamMember} className="refresh-data-button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-                Add First Member
-              </button>
-            </div>
-          ) : (
-            <div className="team-grid">
-              {filteredMembers.map((member, index) => {
-                const performance = performanceData.find(p => p.memberId === (member._id || member.id))
-                const rank = performance ? 
-                  performanceData
-                    .filter(p => p.stats.totalValue > 0)
-                    .sort((a, b) => b.stats.totalValue - a.stats.totalValue)
-                    .findIndex(p => p.memberId === (member._id || member.id)) + 1 : 0
-                
-                return (
-                  <TeamMemberCard 
-                    key={member._id || member.id} 
-                    member={member} 
-                    performance={performance}
-                    rank={rank}
-                    onExport={() => exportMemberPDF(member, performance)}
-                    onToggle={() => toggleActiveStatus(member._id || member.id, member.is_active !== false)}
-                  />
-                )
-              })}
-            </div>
-          )}
-        </div>
+        ) : (
+          filteredMembers.map((member) => {
+            const performance = performanceData.find(p => p?.memberId === (member._id || member.id))
+            const memberRank = performance ? 
+              performanceData
+                .filter(p => p?.stats?.totalValue > 0)
+                .sort((a, b) => (b?.stats?.totalValue || 0) - (a?.stats?.totalValue || 0))
+                .findIndex(p => p.memberId === (member._id || member.id)) + 1 : 0
+            
+            return (
+              <TeamMemberCard 
+                key={member._id || member.id} 
+                member={member} 
+                performance={performance}
+                rank={memberRank}
+                onToggle={() => toggleActiveStatus(
+                  member._id || member.id, 
+                  member.is_active !== false && member.status !== 'inactive',
+                  member.name
+                )}
+              />
+            )
+          })
+        )}
+      </div>
 
-        {/* Performance Insights */}
+      {/* Performance Insights */}
+      {performanceData.length > 0 && (
         <div className="insights-card">
           <div className="card-header">
             <h3>Performance Insights</h3>
@@ -557,58 +522,115 @@ const TeamManagement = () => {
             />
             <InsightCard 
               title="Active Regions" 
-              value={new Set(teamMembers.map(m => m.region)).size}
+              value={new Set(teamMembers.filter(m => m.region).map(m => m.region)).size}
               unit="regions"
               icon="🌍"
               color="#8b5cf6"
             />
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Export Section */}
-      <div className="export-card">
-        <div className="card-header">
-          <h3>Export Reports</h3>
+      {/* Add Member Modal */}
+      {showAddModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Add New Team Member</h3>
+              <button onClick={() => setShowAddModal(false)} className="modal-close">&times;</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Full Name *</label>
+                <input
+                  type="text"
+                  value={newMember.name}
+                  onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                  placeholder="Enter full name"
+                />
+              </div>
+              <div className="form-group">
+                <label>Email Address *</label>
+                <input
+                  type="email"
+                  value={newMember.email}
+                  onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                  placeholder="Enter email address"
+                />
+              </div>
+              <div className="form-group">
+                <label>Username *</label>
+                <input
+                  type="text"
+                  value={newMember.username}
+                  onChange={(e) => setNewMember({...newMember, username: e.target.value})}
+                  placeholder="Enter username"
+                />
+              </div>
+              <div className="form-group">
+                <label>Password *</label>
+                <input
+                  type="password"
+                  value={newMember.password}
+                  onChange={(e) => setNewMember({...newMember, password: e.target.value})}
+                  placeholder="Enter password"
+                />
+              </div>
+              <div className="form-group">
+                <label>Region</label>
+                <input
+                  type="text"
+                  value={newMember.region}
+                  onChange={(e) => setNewMember({...newMember, region: e.target.value})}
+                  placeholder="Enter region"
+                />
+              </div>
+              <div className="form-group">
+                <label>Phone Number</label>
+                <input
+                  type="tel"
+                  value={newMember.phone}
+                  onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                  placeholder="Enter phone number"
+                />
+              </div>
+              <div className="form-group">
+                <label>Role</label>
+                <select
+                  value={newMember.role}
+                  onChange={(e) => setNewMember({...newMember, role: e.target.value})}
+                >
+                  <option value="medrep">Medical Representative</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setShowAddModal(false)} className="cancel-button">
+                Cancel
+              </button>
+              <button onClick={addTeamMember} className="save-button" disabled={loading}>
+                {loading ? 'Adding...' : 'Add Member'}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="export-grid">
-          <ExportOption 
-            icon="📊"
-            title="Export Team Report" 
-            description="Generate comprehensive PDF report for the entire team"
-            onClick={exportToPDF}
-            color="#3b82f6"
-          />
-          <ExportOption 
-            icon="📈"
-            title="Export Individual Reports" 
-            description="Export detailed performance reports for each member"
-            onClick={() => alert('Individual report export coming soon!')}
-            color="#10b981"
-          />
-          <ExportOption 
-            icon="🌍"
-            title="Export by Region" 
-            description="Generate regional performance reports"
-            onClick={() => alert('Regional report export coming soon!')}
-            color="#8b5cf6"
-          />
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
 // Team Member Card Component
-const TeamMemberCard = ({ member, performance, rank, onExport, onToggle }) => (
+const TeamMemberCard = ({ member, performance, rank, onToggle }) => (
   <div className="member-card">
     <div className="member-header">
       <div className="member-avatar">
-        {member.name.charAt(0)}
+        {member.name?.charAt(0) || 'U'}
       </div>
       <div className="member-info">
         <div className="member-name-row">
-          <div className="member-name">{member.name}</div>
+          <div className="member-name">{member.name || 'Unknown'}</div>
           {rank > 0 && rank <= 3 && (
             <span className="rank-badge" style={{
               background: rank === 1 ? '#fef3c7' : 
@@ -622,8 +644,10 @@ const TeamMemberCard = ({ member, performance, rank, onExport, onToggle }) => (
         </div>
         <div className="member-meta">
           {member.region || 'Unknown Region'}
-          <span className={`status-badge ${member.is_active === false ? 'inactive' : 'active'}`}>
-            {member.is_active === false ? 'Inactive' : 'Active'}
+          <span className={`status-badge ${
+            member.is_active === false || member.status === 'inactive' ? 'inactive' : 'active'
+          }`}>
+            {member.is_active === false || member.status === 'inactive' ? 'Inactive' : 'Active'}
           </span>
         </div>
       </div>
@@ -662,16 +686,10 @@ const TeamMemberCard = ({ member, performance, rank, onExport, onToggle }) => (
     )}
     
     <div className="member-actions">
-      <button onClick={onExport} className="action-button export">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M7 10L12 15L17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        Export
-      </button>
-      <button onClick={onToggle} className={`action-button toggle ${member.is_active === false ? 'activate' : 'deactivate'}`}>
-        {member.is_active === false ? 'Activate' : 'Deactivate'}
+      <button onClick={onToggle} className={`action-button toggle ${
+        member.is_active === false || member.status === 'inactive' ? 'activate' : 'deactivate'
+      }`}>
+        {member.is_active === false || member.status === 'inactive' ? 'Activate' : 'Deactivate'}
       </button>
     </div>
   </div>
@@ -705,261 +723,72 @@ const InsightCard = ({ title, value, unit, icon, color }) => (
   </div>
 )
 
-// Export Option Component
-const ExportOption = ({ icon, title, description, onClick, color }) => (
-  <button onClick={onClick} className="export-option" style={{ borderColor: color }}>
-    <span className="export-icon" style={{ color: color }}>{icon}</span>
-    <div className="export-content">
-      <div className="export-title">{title}</div>
-      <div className="export-description">{description}</div>
-      <div className="export-cta" style={{ color: color }}>
-        Click to export →
-      </div>
-    </div>
-  </button>
-)
-
-// CSS Styles
-const styles = `
-/* Base Styles */
-.team-management-container {
-  padding: 30px;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-/* Loading State */
-.team-management-loading {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 80vh;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.team-management-loading .loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #f1f5f9;
-  border-top: 4px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.team-management-loading .loading-text {
-  color: #3b82f6;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Access Denied */
-.access-denied {
-  text-align: center;
-  padding: 80px 20px;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  max-width: 600px;
-  margin: 40px auto;
-}
-
-.access-icon {
-  font-size: 80px;
-  margin-bottom: 20px;
-  color: #ef4444;
-}
-
-.access-denied h2 {
-  color: #1e293b;
-  margin-bottom: 16px;
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.access-denied p {
-  color: #64748b;
-  font-size: 16px;
-  line-height: 1.6;
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-/* Header */
-.management-header {
-  background: linear-gradient(135deg, #1e293b 0%, #3b82f6 100%);
-  color: white;
-  padding: 40px;
-  border-radius: 16px;
-  margin-bottom: 30px;
-  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.header-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.management-header h1 {
-  margin: 0 0 10px 0;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-.header-subtitle {
-  margin: 0 0 12px 0;
-  font-size: 16px;
-  opacity: 0.9;
-  font-weight: 400;
-}
-
-.debug-info {
-  font-size: 14px;
-  opacity: 0.8;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 8px 16px;
-  border-radius: 8px;
-  display: inline-block;
-  font-weight: 500;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.refresh-button {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 10px 20px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-}
-
-.refresh-button:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-}
-
-.refresh-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Error Card */
-.error-card {
-  background: #fef2f2;
-  color: #991b1b;
-  padding: 20px;
+// CSS Styles - ADD THESE TO YOUR EXISTING STYLES
+const additionalStyles = `
+/* Success Card */
+.success-card {
+  background: #d4efdf;
+  color: #27ae60;
+  padding: 16px;
   border-radius: 12px;
   margin-bottom: 30px;
-  border: 1px solid #fecaca;
+  border: 1px solid #a9dfbf;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.error-content {
+.success-content {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 1;
 }
 
-.error-icon {
+.success-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ef4444;
+  color: #27ae60;
   flex-shrink: 0;
 }
 
-.error-text {
+.success-text {
   flex: 1;
   font-weight: 500;
 }
 
-.error-retry {
-  padding: 8px 16px;
-  background: #991b1b;
-  color: white;
+.success-close, .error-close {
+  background: none;
   border: none;
-  border-radius: 6px;
-  font-size: 14px;
+  font-size: 20px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background 0.2s ease;
-  flex-shrink: 0;
+  color: inherit;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
 }
 
-.error-retry:hover {
-  background: #7f1d1d;
+.success-close:hover, .error-close:hover {
+  background: rgba(0,0,0,0.1);
 }
 
-/* Time Range Selector */
-.time-range-selector {
-  text-align: center;
+/* Action Bar */
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 30px;
-}
-
-.range-buttons {
-  display: inline-flex;
-  background: white;
-  padding: 6px;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-}
-
-.range-button {
-  padding: 12px 32px;
-  border: none;
-  background: transparent;
-  color: #64748b;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  text-transform: capitalize;
-  font-size: 15px;
-  transition: all 0.3s ease;
-  min-width: 120px;
-}
-
-.range-button:hover {
-  background: #f8fafc;
-  color: #475569;
-}
-
-.range-button.active {
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
-}
-
-/* Filter Section */
-.filter-section {
-  margin-bottom: 30px;
-  text-align: center;
+  gap: 20px;
+  flex-wrap: wrap;
 }
 
 .filter-buttons {
-  display: inline-flex;
+  display: flex;
   gap: 10px;
 }
 
@@ -987,119 +816,7 @@ const styles = `
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
-/* Stats Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.team-stat-card {
-  background: white;
-  padding: 24px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border-left: 4px solid;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  transition: all 0.3s ease;
-  border: 1px solid #e2e8f0;
-}
-
-.team-stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-}
-
-.team-stat-card .stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.team-stat-card .stat-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.team-stat-card .stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 4px;
-  letter-spacing: -0.5px;
-  line-height: 1.2;
-}
-
-.team-stat-card .stat-label {
-  font-size: 14px;
-  color: #475569;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-/* Management Content */
-.management-content {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 30px;
-  margin-bottom: 30px;
-}
-
-@media (max-width: 1024px) {
-  .management-content {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Management Card */
-.management-card {
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-}
-
-.management-card .card-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 2px solid #f1f5f9;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-title {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.management-card h3 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
-}
-
-.data-count {
-  font-size: 14px;
-  color: #64748b;
-  background: #f8fafc;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-weight: 500;
-}
-
-.header-actions {
+.action-buttons {
   display: flex;
   gap: 12px;
 }
@@ -1109,7 +826,7 @@ const styles = `
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 10px 20px;
+  padding: 12px 24px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -1124,529 +841,199 @@ const styles = `
   transform: translateY(-1px);
 }
 
-.export-button {
-  background: #10b981;
+.add-first-button {
+  background: #3b82f6;
   color: white;
   border: none;
   border-radius: 8px;
-  padding: 10px 20px;
+  padding: 12px 32px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   transition: all 0.2s ease;
 }
 
-.export-button:hover {
-  background: #059669;
+.add-first-button:hover {
+  background: #2563eb;
   transform: translateY(-1px);
 }
 
-/* Team Grid */
-.team-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-/* Member Card */
-.member-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 20px;
-  transition: all 0.2s ease;
-}
-
-.member-card:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.member-header {
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.member-avatar {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 18px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.member-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.member-name-row {
-  display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  z-index: 1000;
+  padding: 20px;
 }
 
-.member-name {
-  font-weight: 600;
+.modal-content {
+  background: white;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  padding: 24px 24px 16px;
+  border-bottom: 2px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
   color: #1e293b;
-  font-size: 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rank-badge {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 10px;
+  font-size: 20px;
   font-weight: 600;
-  flex-shrink: 0;
 }
 
-.member-meta {
-  font-size: 14px;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.status-badge {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-}
-
-.status-badge.active {
-  background: #d4efdf;
-  color: #27ae60;
-}
-
-.status-badge.inactive {
-  background: #fadbd8;
-  color: #c0392b;
-}
-
-/* Performance Stats */
-.performance-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.stat-item {
-  text-align: center;
-  padding: 12px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #3b82f6;
-  font-size: 18px;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.activity-info {
-  font-size: 12px;
-  color: #94a3b8;
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-/* No Data */
-.no-data {
-  text-align: center;
-  padding: 20px;
-  background: white;
-  border-radius: 8px;
-  border: 1px dashed #e2e8f0;
-  margin-bottom: 16px;
-}
-
-.no-data-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-  opacity: 0.5;
-}
-
-.no-data-text {
-  font-size: 14px;
-  color: #94a3b8;
-}
-
-/* Member Actions */
-.member-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.action-button {
-  flex: 1;
-  padding: 10px;
+.modal-close {
+  background: none;
   border: none;
-  border-radius: 6px;
+  font-size: 24px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
+  color: #64748b;
+  padding: 0;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  border-radius: 6px;
   transition: all 0.2s ease;
 }
 
-.action-button.export {
+.modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  color: #475569;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.modal-footer {
+  padding: 16px 24px 24px;
+  border-top: 2px solid #f1f5f9;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel-button {
+  padding: 10px 20px;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+  background: #f1f5f9;
+}
+
+.save-button {
+  padding: 10px 20px;
   background: #3b82f6;
   color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.action-button.export:hover {
+.save-button:hover:not(:disabled) {
   background: #2563eb;
 }
 
-.action-button.toggle {
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-
-.action-button.toggle:hover {
-  background: #f1f5f9;
-}
-
-.action-button.activate {
-  background: #10b981;
-  color: white;
-}
-
-.action-button.activate:hover {
-  background: #059669;
-}
-
-.action-button.deactivate {
-  background: #ef4444;
-  color: white;
-}
-
-.action-button.deactivate:hover {
-  background: #dc2626;
+.save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Empty State */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: #64748b;
+  background: white;
+  border-radius: 16px;
+  grid-column: 1 / -1;
+  border: 2px dashed #e2e8f0;
 }
 
 .empty-icon {
+  font-size: 64px;
   margin-bottom: 20px;
   opacity: 0.5;
-}
-
-.empty-icon svg {
-  width: 48px;
-  height: 48px;
 }
 
 .empty-state h4 {
   margin: 0 0 12px 0;
   color: #475569;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
 }
 
 .empty-state p {
   margin: 0 auto 24px;
-  font-size: 15px;
-  max-width: 400px;
-  line-height: 1.6;
-}
-
-.refresh-data-button {
-  padding: 10px 20px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-  margin: 0 auto;
-}
-
-.refresh-data-button:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-/* Insights Card */
-.insights-card {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  padding: 32px;
-  border-radius: 16px;
-  border: 1px solid #fbbf24;
-  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.1);
-  height: fit-content;
-}
-
-.insights-card .card-header h3 {
-  color: #92400e;
-}
-
-.insights-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 20px;
-}
-
-.insight-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 12px;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  transition: transform 0.2s ease;
-}
-
-.insight-item:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.insight-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  color: white;
-  flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.insight-title {
-  font-weight: 600;
-  color: #92400e;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-.insight-value {
-  color: #92400e;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.insight-unit {
-  font-size: 14px;
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-/* Export Card */
-.export-card {
-  background: white;
-  padding: 32px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-}
-
-.export-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.export-option {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 24px;
-  background: white;
-  border: 2px solid;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: left;
-  width: 100%;
-  height: 100%;
-}
-
-.export-option:hover {
-  background: #f8fafc;
-  transform: translateY(-3px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-}
-
-.export-icon {
-  font-size: 32px;
-  margin-bottom: 16px;
-}
-
-.export-content {
-  flex: 1;
-}
-
-.export-title {
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 8px;
-  font-size: 18px;
-}
-
-.export-description {
-  font-size: 15px;
+  font-size: 16px;
   color: #64748b;
-  line-height: 1.5;
-  margin-bottom: 16px;
-}
-
-.export-cta {
-  font-weight: 500;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .team-management-container {
-    padding: 16px;
-  }
-  
-  .management-header {
-    padding: 24px;
-  }
-  
-  .management-header h1 {
-    font-size: 24px;
-  }
-  
-  .header-content {
-    flex-direction: column;
-    gap: 16px;
-  }
-  
-  .header-actions {
-    width: 100%;
-  }
-  
-  .refresh-button {
-    flex: 1;
-    justify-content: center;
-  }
-  
-  .error-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
-  
-  .error-retry {
-    align-self: flex-end;
-  }
-  
-  .range-buttons {
-    width: 100%;
-  }
-  
-  .range-button {
-    flex: 1;
-    min-width: 0;
-    padding: 12px;
-    font-size: 14px;
-  }
-  
-  .filter-buttons {
-    width: 100%;
-  }
-  
-  .filter-button {
-    flex: 1;
-  }
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .management-card {
-    padding: 24px;
-  }
-  
-  .team-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .insights-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .export-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 480px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .member-avatar {
-    width: 40px;
-    height: 40px;
-    font-size: 16px;
-  }
-  
-  .member-name {
-    font-size: 14px;
-  }
-  
-  .performance-stats {
-    grid-template-columns: 1fr;
-  }
+  line-height: 1.6;
+  max-width: 400px;
 }
 `
 
-// Add styles to document
+// Add to existing styles
 if (typeof document !== 'undefined') {
   const styleSheet = document.createElement('style')
-  styleSheet.textContent = styles
+  styleSheet.textContent = additionalStyles
   document.head.appendChild(styleSheet)
 }
 
