@@ -30,7 +30,7 @@ router.get('/', requireSupervisor, async (req, res) => {
       data: users,
       count: users.length,
       requested_by: {
-        id: req.user.id,
+        id: req.user._id, // Changed to _id
         username: req.user.username,
         role: req.user.role
       }
@@ -49,7 +49,7 @@ router.get('/profile/me', async (req, res) => {
   try {
     console.log(`👤 User ${req.user.username} fetching profile`);
     
-    const dbUser = await User.findById(req.user.id)
+    const dbUser = await User.findById(req.user._id) // Changed to _id
       .select('-password -__v')
       .lean();
     
@@ -167,7 +167,7 @@ router.put('/profile/me', async (req, res) => {
     if (region) updateData.region = region;
     
     const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
+      req.user._id, // Changed to _id
       updateData,
       { new: true, runValidators: true }
     ).select('-password -__v');
@@ -220,7 +220,7 @@ router.post('/', requireSupervisor, async (req, res) => {
       role: role || 'medrep',
       region: region || 'General',
       is_active: true,
-      createdBy: req.user.id
+      createdBy: req.user._id // Changed to _id
     });
     
     await newUser.save();
@@ -296,7 +296,7 @@ router.put('/:id/deactivate', requireSupervisor, async (req, res) => {
       });
     }
     
-    if (user._id.toString() === req.user.id) {
+    if (user._id.toString() === req.user._id.toString()) { // Changed to _id
       return res.status(400).json({
         success: false,
         message: 'You cannot deactivate your own account'
